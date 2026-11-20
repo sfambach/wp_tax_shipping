@@ -1,6 +1,6 @@
 /**
- * D-1507: «Gekaufte Marke hochladen». Reads the Internetmarke PDF from the Post shop in the browser (pdf.js of the Etiketten module's
- * taxmod-label62), fills the dialog with what its text says — product, price, shipment number, and the receiver's address as a hint — and on «Eintragen und drucken» prints
+ * D-1507: «Gekaufte Marke hochladen». The Etiketten module's taxmod-label62 chooses the PDF and reads its text (D-1511: one building
+ * block, taxmodLabel62.pick and .lines); this script only fills the dialog with what those lines say — product, price, shipment number, and the receiver's address as a hint — and on «Eintragen und drucken» prints
  * it on 62 mm before the form records it. Nothing that is not found is guessed; the PDF never leaves the browser.
  */
 (function () {
@@ -20,44 +20,14 @@
 		}
 	}
 
-	// Text items grouped into lines from top to bottom, each line's words left to right.
-	async function lines(file) {
-		pdfjsLib.GlobalWorkerOptions.workerSrc = taxmodLabel62.worker;
-		var pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer(), cMapUrl: taxmodLabel62.cmaps, cMapPacked: true, standardFontDataUrl: taxmodLabel62.fonts }).promise;
-		var content = await (await pdf.getPage(1)).getTextContent();
-		var rows = [];
-
-		content.items.forEach(function (item) {
-			if (!item.str.trim()) {
-				return;
-			}
-
-			var y = item.transform[5], x = item.transform[4];
-			var row = rows.find(function (r) { return Math.abs(r.y - y) < 3; });
-
-			if (!row) {
-				row = { y: y, words: [] };
-				rows.push(row);
-			}
-
-			row.words.push({ x: x, text: item.str.trim() });
-		});
-
-		rows.sort(function (a, b) { return b.y - a.y; });
-
-		return rows.map(function (row) {
-			return { y: row.y, text: row.words.sort(function (a, b) { return a.x - b.x; }).map(function (w) { return w.text; }).join(' ').replace(/\s+/g, ' ') };
-		});
-	}
-
 	// The Internetmarke as bought on 20.11.2026: sender line, «EINSCHREIBEN», number, «IM <date> <price>», then the receiver block.
 	function read(rows) {
 		var found = {};
 		var priceAt = -1;
 
-		rows.forEach(function (row, i) {
-			var price = row.text.match(/\b\d{2}\.\d{2}\.\d{2}\s+(\d{1,3},\d{2})\b/);
-			var number = row.text.match(/\b(A0(?:\s?[0-9A-F]{2,4}){4,})\b/);
+		rows.forEach(function (text, i) {
+			var price = text.match(/\b\d{2}\.\d{2}\.\d{2}\s+(\d{1,3},\d{2})\b/);
+			var number = text.match(/\b(A0(?:\s?[0-9A-F]{2,4}){4,})\b/);
 
 			if (price && priceAt < 0) {
 				found.price = price[1];
@@ -68,12 +38,12 @@
 				found.number = number[1].replace(/\s+/g, '');
 			}
 
-			if (/EINSCHREIBEN/i.test(row.text)) {
+			if (/EINSCHREIBEN/i.test(text)) {
 				found.registered = true;
 			}
 		});
 
-		var block = priceAt < 0 ? [] : rows.slice(priceAt + 1).map(function (r) { return r.text; }).filter(function (text) {
+		var block = priceAt < 0 ? [] : rows.slice(priceAt + 1).filter(function (text) {
 			return !/Deutsche Post|^IM\b|^R$/.test(text);
 		});
 		var last = block.length - 1;
@@ -106,6 +76,26 @@
 		return match ? match.value : (found.registered ? registered : '');
 	}
 
+	// A PDF from the disk or from a mail: read, and the dialog filled from its lines.
+	async function load(file, name) {
+		chosen = file;
+		var state = document.querySelector('[data-taxship-stamp-state]');
+
+		try {
+			var found = read(await taxmodLabel62.lines(file));
+			put('product', product(found));
+			put('price', found.price);
+			put('number', found.number);
+			// D-1510: the address on the stamp is only shown; the receiver contact is optional and nothing is stored from the stamp.
+			var address = document.querySelector('[data-taxship-stamp-address]');
+			var shown = [found.name, found.addition, [found.street, found.house].filter(Boolean).join(' '), [found.postal_code, found.city].filter(Boolean).join(' ')].filter(Boolean);
+			address.textContent = shown.length ? address.getAttribute('data-label') + ' ' + shown.join(', ') : '';
+			state.textContent = state.getAttribute('data-read') + ' ' + name;
+		} catch (failure) {
+			state.textContent = taxmodLabel62.failed + ' ' + failure.message;
+		}
+	}
+
 	document.addEventListener('click', function (event) {
 		var button = event.target.closest('[data-taxship-stamp-pick]');
 
@@ -114,32 +104,42 @@
 		}
 
 		event.preventDefault();
-		var input = document.createElement('input');
-		input.type = 'file';
-		input.accept = 'application/pdf,.pdf';
-		input.addEventListener('change', async function () {
-			if (!input.files || !input.files.length) {
-				return;
-			}
-
-			chosen = input.files[0];
-			var state = document.querySelector('[data-taxship-stamp-state]');
-
-			try {
-				var found = read(await lines(chosen));
-				put('product', product(found));
-				put('price', found.price);
-				put('number', found.number);
-				// D-1510: the address on the stamp is only shown; the receiver contact is optional and nothing is stored from the stamp.
-				var address = document.querySelector('[data-taxship-stamp-address]');
-				var shown = [found.name, found.addition, [found.street, found.house].filter(Boolean).join(' '), [found.postal_code, found.city].filter(Boolean).join(' ')].filter(Boolean);
-				address.textContent = shown.length ? address.getAttribute('data-label') + ' ' + shown.join(', ') : '';
-				state.textContent = state.getAttribute('data-read') + ' ' + chosen.name;
-			} catch (failure) {
-				state.textContent = taxmodLabel62.failed + ' ' + failure.message;
+		taxmodLabel62.pick().then(function (file) {
+			if (file) {
+				field('mail_cart').value = '';
+				field('carrier').value = 'post';
+				load(file, file.name);
 			}
 		});
-		input.click();
+	});
+
+	// D-1511: «Sendung anlegen» at a label from a mail opens the same dialog with that label's PDF.
+	document.addEventListener('click', async function (event) {
+		var button = event.target.closest('[data-taxship-mail-pdf]');
+
+		if (!button) {
+			return;
+		}
+
+		event.preventDefault();
+		button.disabled = true;
+
+		try {
+			var response = await fetch(button.getAttribute('data-taxship-mail-pdf'), { credentials: 'same-origin' });
+
+			if (!response.ok || response.headers.get('Content-Type') !== 'application/pdf') {
+				throw new Error((await response.text()).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200));
+			}
+
+			document.querySelector('[data-taxship-stamp-form] + div .taxmod-dialog-open').click();
+			field('mail_cart').value = button.getAttribute('data-taxship-mail-cart');
+			field('carrier').value = button.getAttribute('data-taxship-mail-carrier');
+			await load(new Blob([await response.arrayBuffer()], { type: 'application/pdf' }), button.getAttribute('data-taxship-mail-cart'));
+		} catch (failure) {
+			window.alert(taxmodLabel62.failed + ' ' + failure.message);
+		} finally {
+			button.disabled = false;
+		}
 	});
 
 	// Printed on the click, then recorded: the PDF is only in this page, so it is printed before the form leaves it.

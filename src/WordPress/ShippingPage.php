@@ -9,6 +9,7 @@ use Taxmod\WordPress\Admin\RecordPick;
 use Taxmod\WordPress\ModelDoor;
 use TaxmodShipping\Core\Address;
 use TaxmodShipping\Core\LetterRates;
+use TaxmodShipping\Core\MailLabels;
 use TaxmodShipping\Core\Money;
 use TaxmodShipping\Core\Parcel;
 use TaxmodShipping\Core\Purchase;
@@ -30,9 +31,17 @@ final class ShippingPage
     public const DOWNLOAD = 'taxship_download';
     public const REMOVE   = 'taxship_remove';
     public const STAMP    = 'taxship_stamp';
+    public const MAIL_PDF = 'taxship_mail_pdf';
+
+    /** D-1511: the mail module's labels and the PDF behind one of their links. */
+    public const MAIL_LABELS = 'taxmail_shipping_labels';
+
+    public const MAIL_LABEL_PDF = 'taxmail_shipping_label_pdf';
+
+    public const MAIL_LABEL_PRINTED = 'taxmail_shipping_label_printed';
 
     /** admin-post action → method */
-    public const ACTS = [self::BUY => 'buy', self::STATUS => 'status', self::PRINT => 'printLabel', self::DOWNLOAD => 'download', self::REMOVE => 'remove', self::STAMP => 'stamp'];
+    public const ACTS = [self::BUY => 'buy', self::STATUS => 'status', self::PRINT => 'printLabel', self::DOWNLOAD => 'download', self::REMOVE => 'remove', self::STAMP => 'stamp', self::MAIL_PDF => 'mailPdf'];
 
     /** D-1507: the Etiketten module's 62 mm postage print, attached by its handle only. */
     public const LABEL62 = 'taxmod-label62';
@@ -60,6 +69,10 @@ final class ShippingPage
             $sections[] = ['title' => __('Tarife', 'taxmod-shipping'), 'html' => $this->offers($parcel)];
         } elseif (is_string($parcel)) {
             $sections[] = ['html' => '<div class="notice notice-warning inline"><p>' . esc_html($parcel) . '</p></div>'];
+        }
+
+        if (self::canPrintPostage() && has_filter(self::MAIL_LABELS)) {
+            $sections[] = ['title' => __('Aus Mails', 'taxmod-shipping'), 'html' => $this->mailLabels()];
         }
 
         $sections[] = ['title' => __('Gekaufte Etiketten', 'taxmod-shipping'), 'html' => (self::canPrintPostage() ? $this->stampDialog() : '') . $this->purchases()];
@@ -132,7 +145,7 @@ final class ShippingPage
             'control' => '<input type="hidden" name="applied_packaging" value="' . esc_attr((string) $chosen) . '" data-taxship-packagings="'
                 . esc_attr((string) wp_json_encode(array_map(static fn (\TaxmodShipping\Core\Packaging $p): array => $p->formValues(), $packagings->all()))) . '">'
                 . \Taxmod\WordPress\Admin\RecordPick::field('packaging', $packagings->pickTree(), $chosen > 0 ? $chosen : null),
-            'hint' => __('Versandverpackung aus dem Lager: füllt Maße und Gewicht (Höchstgewicht − 1 g). Alles bleibt änderbar.', 'taxmod-shipping'),
+            'hint' => __('Versandverpackung aus dem Lager: füllt Maße und Gewicht (Höchstgewicht). Alles bleibt änderbar.', 'taxmod-shipping'),
         ]];
         $country = $value('country') === '' ? 'DE' : $value('country');
 
@@ -234,12 +247,56 @@ final class ShippingPage
             ), $formId, 'cart');
     }
 
+    /** @var array<int, Purchase>|null */
+    private ?array $all = null;
+
+    /**
+     * @return array<int, Purchase>
+     * @throws ShippingError
+     */
+    private function all(): array
+    {
+        return $this->all ??= (new ShipmentStore())->all();
+    }
+
+    /**
+     * D-1511: labels bought elsewhere (DHL online, the Post shop) that the mail module read from their mails and no shipment holds yet.
+     * «Sendung anlegen» loads the PDF into the same dialog as an uploaded stamp; nothing is recorded before that dialog is confirmed.
+     */
+    private function mailLabels(): string
+    {
+        try {
+            $references = array_values(array_map(static fn (Purchase $purchase): string => $purchase->reference, $this->all()));
+        } catch (ShippingError) {
+            $references = [];
+        }
+
+        $rows = [];
+
+        foreach (MailLabels::open(apply_filters(self::MAIL_LABELS, []), $references) as $label) {
+            $pdf = wp_nonce_url(add_query_arg(['action' => self::MAIL_PDF, 'link' => rawurlencode($label['link'])], admin_url('admin-post.php')), self::MAIL_PDF);
+            $rows[] = [
+                esc_html($label['date'] === '' ? '' : wp_date((string) get_option('date_format'), (int) strtotime($label['date']))),
+                esc_html(strtoupper($label['carrier'])),
+                esc_html($label['cart']),
+                '<button type="button" class="button" data-taxship-mail-pdf="' . esc_url($pdf) . '" data-taxship-mail-cart="' . esc_attr($label['cart']) . '" data-taxship-mail-carrier="' . esc_attr($label['carrier']) . '" title="' . esc_attr__('Sendung anlegen und drucken', 'taxmod-shipping') . '">'
+                    . ListPage::icon('upload', __('Sendung anlegen und drucken', 'taxmod-shipping')) . '</button>',
+            ];
+        }
+
+        return ListPage::grid(
+            [[__('Gekauft', 'taxmod-shipping')], [__('Dienst', 'taxmod-shipping')], [__('Warenkorb', 'taxmod-shipping')], ['']],
+            $rows,
+            esc_html__('Keine offenen Marken aus Mails.', 'taxmod-shipping')
+        );
+    }
+
     private function purchases(): string
     {
         $rows = [];
 
         try {
-            $all = (new ShipmentStore())->all();
+            $all = $this->all();
         } catch (ShippingError $failure) {
             return '<div class="notice notice-warning inline"><p>' . esc_html($failure->getMessage()) . '</p></div>';
         }
@@ -324,6 +381,7 @@ final class ShippingPage
             // D-1510: a receiver, if any, is a contact (D-1497); the stamp's address is shown, never stored (Stefan 20.11., privacy).
             . '<div style="margin:.3em 0"><span style="display:inline-block;width:9em">' . esc_html__('Empfänger (freiwillig)', 'taxmod-shipping') . '</span>'
             . RecordPick::field('receiver_contact', (new Contacts())->pickTree(), null, $formId) . '</div>'
+            . '<input type="hidden" name="mail_cart" value="" form="' . esc_attr($formId) . '"><input type="hidden" name="carrier" value="' . esc_attr(LetterRates::CARRIER) . '" form="' . esc_attr($formId) . '">'
             . '<p class="description" data-taxship-stamp-address data-label="' . esc_attr__('Anschrift auf der Marke (nur zur Ansicht, wird nicht gespeichert):', 'taxmod-shipping') . '"></p>';
 
         return '<form id="' . esc_attr($formId) . '" method="post" action="' . esc_url(admin_url('admin-post.php')) . '" data-taxship-stamp-form>'
@@ -356,10 +414,14 @@ final class ShippingPage
             throw new ShippingError(__('Diesen Kontakt gibt es nicht.', 'taxmod-shipping'));
         }
 
-        $firm = $settings->carrierFirms()[LetterRates::CARRIER] ?? 0;
+        // D-1511: a label from a mail may be DHL's; anything else is the Post shop's stamp.
+        $carrier = $text('carrier');
+        $carrier = in_array($carrier, MailLabels::CARRIERS, true) ? $carrier : LetterRates::CARRIER;
+        $cart = (string) preg_replace('/[^A-Za-z0-9]/', '', $text('mail_cart'));
+        $firm = $settings->carrierFirms()[$carrier] ?? 0;
 
         if ($firm === 0) {
-            throw new ShippingError(__('Unter Einstellungen › Versand fehlt die Firma für Deutsche Post.', 'taxmod-shipping'));
+            throw new ShippingError(sprintf(/* translators: %s: carrier */ __('Unter Einstellungen › Versand fehlt die Firma für %s.', 'taxmod-shipping'), strtoupper($carrier)));
         }
 
         $missing = ShipmentStore::roles()->missing();
@@ -369,9 +431,15 @@ final class ShippingPage
         }
 
         $number = (string) preg_replace('/\s+/', '', $text('number'));
-        $rate = new Rate(LetterRates::CARRIER, 'stamp', $product, $cents, $number !== '', 0);
-        $purchase = Purchase::bought('', $rate, $name, ['carrier' => LetterRates::CARRIER, 'reference' => 'shop-' . current_time('YmdHis'), 'state' => 'paid', 'numbers' => $number === '' ? [] : [$number]], current_time('mysql'));
+        $rate = new Rate($carrier, 'stamp', $product, $cents, $number !== '', 0);
+        $reference = $cart === '' ? 'shop-' . current_time('YmdHis') : MailLabels::REFERENCE . $cart;
+        $purchase = Purchase::bought('', $rate, $name, ['carrier' => $carrier, 'reference' => $reference, 'state' => 'paid', 'numbers' => $number === '' ? [] : [$number]], current_time('mysql'));
         (new ShipmentStore())->add($purchase, null, $contact, $settings->senderContact(), $firm);
+
+        if ($cart !== '') {
+            // Printed in the browser before this form was sent: the mail module now keeps the label two weeks, not thirty days.
+            do_action(self::MAIL_LABEL_PRINTED, $cart);
+        }
 
         return self::url();
     }
@@ -482,6 +550,25 @@ final class ShippingPage
         nocache_headers();
         header('Content-Type: application/pdf');
         header('Content-Disposition: inline; filename="etikett-' . $number . '.pdf"');
+        header('Content-Length: ' . strlen($pdf));
+        print $pdf; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- binary PDF
+        exit;
+    }
+
+    /** D-1511: the PDF of a label from a mail, fetched by the mail module (stored links only), to the browser for reading and printing. */
+    public function mailPdf(): void
+    {
+        self::allowed();
+        ListPage::nonce(self::MAIL_PDF);
+        $link = esc_url_raw(rawurldecode(wp_unslash((string) ($_GET['link'] ?? ''))));
+        $pdf = apply_filters(self::MAIL_LABEL_PDF, null, $link);
+
+        if (! is_string($pdf) || ! str_starts_with($pdf, '%PDF')) {
+            throw new ShippingError(__('Das PDF dieser Marke ist nicht mehr zu holen.', 'taxmod-shipping'));
+        }
+
+        nocache_headers();
+        header('Content-Type: application/pdf');
         header('Content-Length: ' . strlen($pdf));
         print $pdf; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- binary PDF
         exit;

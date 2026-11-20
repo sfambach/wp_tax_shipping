@@ -15,7 +15,7 @@ final class StampPrintTest extends TestCase
 
         self::assertSame('taxmod-label62', ShippingPage::LABEL62);
         self::assertStringContainsString("wp_script_is(self::LABEL62, 'registered')", $page);
-        self::assertSame(3, substr_count($page, 'self::canPrintPostage()'), 'Upload dialog, enqueue and row button all ask whether the script is there.');
+        self::assertSame(4, substr_count($page, 'self::canPrintPostage()'), 'Mail list, upload dialog, enqueue and row button all ask whether the script is there.');
         self::assertDirectoryDoesNotExist($root . '/assets/pdfjs');
         self::assertStringNotContainsString('pdfjs', $page);
     }
@@ -56,8 +56,16 @@ final class StampPrintTest extends TestCase
         $script = (string) file_get_contents(dirname(__DIR__, 2) . '/assets/stamp-upload.js');
 
         self::assertStringContainsString('->add($purchase, null,', $page, 'D-1507: no parcel is guessed for an uploaded stamp.');
-        self::assertDoesNotMatchRegularExpression('/\bfetch\s*\(|XMLHttpRequest|FormData/', $script, 'The PDF never leaves the browser.');
+        // D-1511: the one fetch brings a mail's label PDF from this site into the browser; nothing is sent out of it.
+        self::assertDoesNotMatchRegularExpression('/XMLHttpRequest|FormData|method:\s*.POST/', $script, 'The PDF never leaves the browser.');
+        self::assertSame(1, preg_match_all('/\bfetch\s*\(/', $script));
+        self::assertStringContainsString("fetch(button.getAttribute('data-taxship-mail-pdf')", $script);
         self::assertStringContainsString('taxmodLabel62.run(chosen', $script);
+
+        // D-1511: choosing and reading the PDF is the label module's building block; this script only fills fields from its lines.
+        self::assertStringContainsString('taxmodLabel62.lines(', $script);
+        self::assertStringContainsString('taxmodLabel62.pick()', $script);
+        self::assertDoesNotMatchRegularExpression('/getTextContent|pdfjsLib|getDocument/', $script);
 
         // D-1510: the receiver is a contact from the chooser; the stamp's address is only a hint, never typed fields.
         $dialog = substr($page, (int) strpos($page, 'private function stampDialog'), (int) strpos($page, 'public function stamp()') - (int) strpos($page, 'private function stampDialog'));

@@ -4,7 +4,7 @@ namespace TaxmodShipping\Core;
 
 /**
  * A shipping template (D-1505): a material of the group «Versandverpackungen» with its edges and weights. Chosen in the
- * parcel form, it fills the edges and the weight — its maximum less one gram, so the parcel stays below that limit.
+ * parcel form, it fills the edges and the weight — its maximum as it is (Stefan 20.11.: «nimm doch die richtigen Maße»).
  *
  * @see docs/konzept.md
  */
@@ -21,10 +21,10 @@ final class Packaging
     ) {
     }
 
-    /** The weight the form starts with: the maximum less a gram; without a maximum, the empty weight. */
+    /** The weight the form starts with: the maximum; without a maximum, the empty weight. */
     public function startWeight(): int
     {
-        return $this->maxGrams > 1 ? $this->maxGrams - 1 : $this->emptyGrams;
+        return $this->maxGrams > 0 ? $this->maxGrams : $this->emptyGrams;
     }
 
     /** @return array{weight_g: string, length_cm: string, width_cm: string, height_cm: string} only what the template knows */

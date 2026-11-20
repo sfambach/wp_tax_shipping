@@ -1,5 +1,5 @@
 /**
- * A shipping template chosen in «Vorlage» fills weight (max − 1 g) and the three edges at once (D-1505, Stefan 20.11.). The values
+ * A shipping template chosen in «Vorlage» fills weight (its maximum) and the three edges at once (D-1505, Stefan 20.11.). The values
  * come with the field from the server; everything stays editable, and «Tarife vergleichen» keeps what is typed.
  */
 (function () {

@@ -21,6 +21,14 @@ final class ShipmentRoles
 
     public const VALUES = ['shipment_awaiting_payment', 'shipment_paid', 'shipment_sent', 'currency_default', 'unit_gram', 'unit_metre', 'prefix_centi'];
 
+    /** D-1505 templates and D-1506 letters are extras; without these roles the page simply offers none. */
+    public const OPTIONAL = [
+        'nodes'  => ['packaging', 'letter_product'],
+        'fields' => ['packaging_length', 'packaging_width', 'packaging_height', 'packaging_empty_weight', 'packaging_max_weight', 'material_name',
+            'letter_name', 'letter_code', 'letter_price', 'letter_max_length', 'letter_max_width', 'letter_max_height', 'letter_max_weight', 'letter_shop_url'],
+        'values' => ['prefix_kilo', 'prefix_deci', 'prefix_milli'],
+    ];
+
     /** @param \Closure(string, string): ?int $find group, key → id */
     public function __construct(private readonly \Closure $find)
     {
@@ -39,6 +47,24 @@ final class ShipmentRoles
     public function value(string $key): int
     {
         return $this->get('values', $key);
+    }
+
+    /** A role that may be missing: its id, or 0. */
+    public function optional(string $key): int
+    {
+        foreach (self::OPTIONAL as $group => $keys) {
+            if (in_array($key, $keys, true)) {
+                return ($this->find)($group, $key) ?? 0;
+            }
+        }
+
+        foreach (['nodes' => self::NODES, 'fields' => self::FIELDS, 'values' => self::VALUES] as $group => $keys) {
+            if (in_array($key, $keys, true)) {
+                return ($this->find)($group, $key) ?? 0;
+            }
+        }
+
+        return 0;
     }
 
     /** @return list<string> «group:key» of every role not set */

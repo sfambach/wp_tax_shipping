@@ -40,6 +40,11 @@ final class Contacts
                     $roles[] = ['module' => self::ROLE_MODULE, 'group' => $group, 'key' => $key, 'required' => $key !== 'contact_email'];
                 }
             }
+            foreach (ShipmentRoles::OPTIONAL as $group => $keys) {
+                foreach ($keys as $key) {
+                    $roles[] = ['module' => self::ROLE_MODULE, 'group' => $group, 'key' => $key, 'required' => false];
+                }
+            }
 
             return $roles;
         });

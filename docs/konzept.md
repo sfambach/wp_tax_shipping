@@ -46,3 +46,21 @@ Ein Dienst antwortet nur, wenn `carrier` seiner ist, und gibt sonst die Antwort 
 - Preislisten für Dienste ohne Privat-API (GLS, Hermes, DPD) kommen als Daten ins Modell, nicht in den Code (D-1496), noch nicht gebaut.
 - Sammeldienste (Packlink PRO, Sendcloud, Shipcloud): später, Stefan entscheidet.
 - Briefe über Internetmarke (Portokasse): noch nicht gebaut.
+
+## Vorlagen und Briefe (0.0.3)
+
+Beschlüsse: **D-1505** (Versandverpackungen als Materialgruppe unter Verbrauchsmaterial), **D-1506** (Briefprodukte als Preisliste, Kauf im Shop der Post). Beides auf Stefans Karte vom 20.11.2026, 09:01 und 09:02 UTC.
+
+```mermaid
+flowchart LR
+  V["Vorlage gewählt"] --> F["Maße + Höchstgewicht − 1 g ins Formular"]
+  F --> T["Tarife: Dienste + Briefpreisliste"]
+  T -- Brief --> S["Shop der Post öffnen, dort zahlen"]
+  S --> E["Als gekauft eintragen: Satz «Sendungen», Stand bezahlt"]
+```
+
+- Die Vorlage ist ein Material der Gruppe «Versandverpackungen» (Rolle `packaging`). Gewählt wird sie mit dem Satz-Wähler des Modellers (D-1182), in dem man gleich eine neue Vorlage anlegen kann. Es wird nur gelesen, und was der Besitzer danach tippt, gilt.
+- Briefe sind Sätze in «Briefprodukte» (Rolle `letter_product`): Name, Produktnummer, Preis, Höchstmaße, Höchstgewicht und Shop. Ein Produkt ohne https-Shop oder ohne Preis wird nicht angeboten.
+- Kauf: Bei uns fließt kein Geld. Stefan hat keine Portokasse, und die Internetmarke-API verkauft nur gegen Portokasse.
+- ⚠️ *INFERRED:* Die Briefpreisliste gilt nur für das Zielland DE.
+- ⚠️ *INFERRED:* Die Vorbelegung (Preise und Maße Stand 1.1.2025) muss Stefan prüfen. Die Produktnummern bleiben leer, bis sie belegt sind.

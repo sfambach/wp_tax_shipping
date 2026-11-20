@@ -137,7 +137,7 @@
 
 		try {
 			var pdf = await pdfFrom(button.getAttribute('data-taxship-mail-pdf'));
-			document.querySelector('[data-taxship-stamp-form] + div .taxmod-dialog-open').click();
+			document.getElementById('taxship-stamp').checked = true;
 			field('mail_cart').value = button.getAttribute('data-taxship-mail-cart');
 			field('carrier').value = button.getAttribute('data-taxship-mail-carrier');
 			await load(pdf, button.getAttribute('data-taxship-mail-cart'));
@@ -165,11 +165,20 @@
 
 		event.preventDefault();
 		// The Post shop's stamp has corner crosses to cut along; left out, the stamp prints large (Stefan 20.11. «Etwas klein»).
-		taxmodLabel62.run(chosen, '', { cutMarks: field('carrier').value === 'post' }).then(function () {
-			return keep(chosen);
-		}).then(function () {
-			form.dataset.printed = '1';
-			form.submit();
+		// No dialog over a dialog: this one closes while the print dialog asks; that one closed with «Abbrechen» records nothing
+		// and brings this one back as it was.
+		var own = document.getElementById('taxship-stamp');
+		own.checked = false;
+		taxmodLabel62.run(chosen, '', { cutMarks: field('carrier').value === 'post' }).then(function (printed) {
+			if (!printed) {
+				own.checked = true;
+				return;
+			}
+
+			return keep(chosen).then(function () {
+				form.dataset.printed = '1';
+				form.submit();
+			});
 		});
 	});
 

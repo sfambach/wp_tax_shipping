@@ -58,6 +58,10 @@ final class ShippingPage
     /** D-1507: the Etiketten module's 62 mm postage print, attached by its handle only. */
     public const LABEL62 = 'taxmod-label62';
 
+    private const STAMP_FORM = 'taxship-stamp-form';
+
+    private const STAMP_SWITCH = 'taxship-stamp';
+
     private ?WorkplacePrinters $printers = null;
 
     /** D-1515: the labels on the page's front; the rest are behind «Alle Etiketten». */
@@ -100,7 +104,7 @@ final class ShippingPage
         }
 
         // D-1515: one list of labels, the newest five here, all of them one click away.
-        $sections[] = ['title' => __('Etiketten', 'taxmod-shipping'), 'html' => (self::canPrintPostage() ? $this->stampDialog() : '') . $this->labels(self::SHORT_LIST)];
+        $sections[] = ['title' => __('Etiketten', 'taxmod-shipping'), 'html' => $this->labels(self::SHORT_LIST)];
 
         return $this->page(__('Versand', 'taxmod-shipping'), $sections);
     }
@@ -125,7 +129,8 @@ final class ShippingPage
     /** D-1515: every label, the same list as on the page's front with no limit. */
     private function allLabels(): string
     {
-        $html = '<p>' . ListPage::back(self::url(), __('Zurück zum Versand', 'taxmod-shipping')) . '</p>' . (self::canPrintPostage() ? $this->stampDialog() : '') . $this->labels(null);
+        $html = '<p>' . ListPage::back(self::url(), __('Zurück zum Versand', 'taxmod-shipping')) . '</p>'
+            . (self::canPrintPostage() ? $this->stampForm() . ListPage::toolbar([$this->stampDialog()]) : '') . $this->labels(null);
 
         return $this->page(__('Etiketten', 'taxmod-shipping'), [['title' => __('Alle Etiketten', 'taxmod-shipping'), 'html' => $html]]);
     }
@@ -229,7 +234,11 @@ final class ShippingPage
         ]];
         $country = $value('country') === '' ? 'DE' : $value('country');
 
-        return '<form method="get" action="' . esc_url(admin_url('admin.php')) . '">'
+        // Stefan 20.11. 18:27 «den Button einfach zum Tarif vergleichen, also rechts daneben … wieder die Toolbar-Idee»: one toolbar
+        // line. The stamp's own form stands outside this one; its dialog sends only to it.
+        $stamp = self::canPrintPostage();
+
+        return ($stamp ? $this->stampForm() : '') . '<form method="get" action="' . esc_url(admin_url('admin.php')) . '">'
             . '<input type="hidden" name="page" value="taxmod-lager-modul"><input type="hidden" name="module" value="' . esc_attr(Plugin::SLUG) . '">'
             . ListPage::form([
                 ...$templateRow,
@@ -238,7 +247,8 @@ final class ShippingPage
                 ['label' => __('Breite', 'taxmod-shipping'), 'control' => $number('width_cm', 'cm'), 'for' => 'taxship-width_cm'],
                 ['label' => __('Höhe', 'taxmod-shipping'), 'control' => $number('height_cm', 'cm'), 'for' => 'taxship-height_cm'],
                 ['label' => __('Zielland', 'taxmod-shipping'), 'control' => ListPage::field(InputKind::Line, 'country', $country, ['id' => 'taxship-country', 'size' => '5']), 'for' => 'taxship-country', 'hint' => __('ISO-Kürzel, z. B. DE, AT, NL.', 'taxmod-shipping')],
-            ], '<button type="submit" class="button button-primary">' . ListPage::icon('search', __('Tarife vergleichen', 'taxmod-shipping')) . ' ' . esc_html__('Tarife vergleichen', 'taxmod-shipping') . '</button>')
+            ], '<button type="submit" class="button button-primary">' . ListPage::icon('search', __('Tarife vergleichen', 'taxmod-shipping')) . ' ' . esc_html__('Tarife vergleichen', 'taxmod-shipping') . '</button>'
+                . ($stamp ? ' ' . $this->stampDialog() : ''))
             . '</form>';
     }
 
@@ -367,7 +377,7 @@ final class ShippingPage
                     esc_html(self::euro($purchase->rate->priceCents)),
                     $purchase->isPaid() ? esc_html__('bezahlt', 'taxmod-shipping') : esc_html__('wartet auf Bezahlung', 'taxmod-shipping'),
                     esc_html(implode(', ', $purchase->numbers)),
-                    $this->purchaseButtons($purchase),
+                    self::side($this->purchaseButtons($purchase)),
                 ];
             } elseif ($mail !== null) {
                 $pdf = wp_nonce_url(add_query_arg(['action' => self::MAIL_PDF, 'link' => rawurlencode($mail['link'])], admin_url('admin-post.php')), self::MAIL_PDF);
@@ -379,7 +389,7 @@ final class ShippingPage
                     '',
                     esc_html__('offen (aus Mail)', 'taxmod-shipping'),
                     '',
-                    '<button type="button" class="button" data-taxship-mail-pdf="' . esc_url($pdf) . '" data-taxship-mail-cart="' . esc_attr($mail['cart']) . '" data-taxship-mail-carrier="' . esc_attr($mail['carrier']) . '" title="' . esc_attr__('Sendung anlegen und drucken', 'taxmod-shipping') . '">'
+                    '<button type="button" class="button taxmod-square" data-taxship-mail-pdf="' . esc_url($pdf) . '" data-taxship-mail-cart="' . esc_attr($mail['cart']) . '" data-taxship-mail-carrier="' . esc_attr($mail['carrier']) . '" title="' . esc_attr__('Sendung anlegen und drucken', 'taxmod-shipping') . '">'
                         . ListPage::icon('upload', __('Sendung anlegen und drucken', 'taxmod-shipping')) . '</button>',
                 ];
             }
@@ -394,6 +404,12 @@ final class ShippingPage
             $rows,
             esc_html__('Noch keine Etiketten.', 'taxmod-shipping')
         ) . $more;
+    }
+
+    /** Stefan 20.11. 18:27 «die Buttons sind jetzt übereinander … wir könnten die Buttons nebeneinander haben»: one line. */
+    private static function side(string $buttons): string
+    {
+        return '<span style="display:inline-flex;gap:4px;white-space:nowrap">' . $buttons . '</span>';
     }
 
     private static function originWord(string $origin): string
@@ -411,11 +427,11 @@ final class ShippingPage
         $post = static fn (string $action, string $icon, string $label, string $extra = ''): string => '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="display:inline">'
             . wp_nonce_field($action . $purchase->id, '_wpnonce', true, false)
             . '<input type="hidden" name="action" value="' . esc_attr($action) . '"><input type="hidden" name="purchase" value="' . esc_attr($purchase->id) . '">' . $extra
-            . '<button type="submit" class="button" title="' . esc_attr($label) . '">' . ListPage::icon($icon, $label) . '</button></form>';
+            . '<button type="submit" class="button taxmod-square" title="' . esc_attr($label) . '">' . ListPage::icon($icon, $label) . '</button></form>';
         $html = '';
 
         if (! $purchase->isPaid() && $purchase->payUrl !== '') {
-            $html .= '<a class="button button-primary" href="' . esc_url($purchase->payUrl) . '" target="_blank" rel="noopener" title="' . esc_attr__('Beim Dienst bezahlen', 'taxmod-shipping') . '">'
+            $html .= '<a class="button button-primary taxmod-square" href="' . esc_url($purchase->payUrl) . '" target="_blank" rel="noopener" title="' . esc_attr__('Beim Dienst bezahlen', 'taxmod-shipping') . '">'
                 . ListPage::icon('money-alt', __('Beim Dienst bezahlen', 'taxmod-shipping')) . '</a> ';
         }
 
@@ -424,7 +440,7 @@ final class ShippingPage
         // D-1513: a kept stamp prints from the store, without choosing the file again.
         if (self::canPrintPostage() && in_array(self::postageKey((int) $purchase->id), $this->keptKeys(), true)) {
             $url = wp_nonce_url(add_query_arg(['action' => self::KEPT_PDF, 'purchase' => $purchase->id], admin_url('admin-post.php')), self::KEPT_PDF . $purchase->id);
-            $html .= '<button type="button" class="button" data-taxship-kept-pdf="' . esc_url($url) . '" data-taxship-carrier="' . esc_attr($purchase->rate->carrier) . '" title="' . esc_attr__('Gespeicherte Marke drucken (62 mm)', 'taxmod-shipping') . '">'
+            $html .= '<button type="button" class="button taxmod-square" data-taxship-kept-pdf="' . esc_url($url) . '" data-taxship-carrier="' . esc_attr($purchase->rate->carrier) . '" title="' . esc_attr__('Gespeicherte Marke drucken (62 mm)', 'taxmod-shipping') . '">'
                 . ListPage::icon(ListPage::ICON_PRINT, __('Gespeicherte Marke drucken (62 mm)', 'taxmod-shipping')) . '</button> ';
 
             return $html . $post(self::REMOVE, ListPage::ICON_DELETE, __('Sendung löschen (rückgängig machbar)', 'taxmod-shipping'));
@@ -433,7 +449,7 @@ final class ShippingPage
         // D-1507: a stamp bought in the Post shop is a PDF on the owner's disk; the browser crops it to 62 mm and prints it on his click.
         if ($purchase->rate->carrier === LetterRates::CARRIER) {
             if (self::canPrintPostage()) {
-                $html .= '<button type="button" class="button" data-taxmod-label62-pick="" data-taxmod-label62-cut-marks title="' . esc_attr__('Marke aus dem Post-Shop drucken (PDF wählen, 62 mm)', 'taxmod-shipping') . '">'
+                $html .= '<button type="button" class="button taxmod-square" data-taxmod-label62-pick="" data-taxmod-label62-cut-marks title="' . esc_attr__('Marke aus dem Post-Shop drucken (PDF wählen, 62 mm)', 'taxmod-shipping') . '">'
                     . ListPage::icon(ListPage::ICON_PRINT, __('Marke aus dem Post-Shop drucken (PDF wählen, 62 mm)', 'taxmod-shipping')) . '</button> ';
             }
 
@@ -443,7 +459,7 @@ final class ShippingPage
         $printers = array_values(array_column(($this->printers ??= new WorkplacePrinters())->all(), 'name'));
 
         foreach ($purchase->isPaid() ? $purchase->numbers : [] as $number) {
-            $html .= '<a class="button" href="' . esc_url(wp_nonce_url(add_query_arg(['action' => self::DOWNLOAD, 'purchase' => $purchase->id, 'number' => $number], admin_url('admin-post.php')), self::DOWNLOAD . $purchase->id)) . '" title="' . esc_attr__('Etikett als PDF', 'taxmod-shipping') . '">'
+            $html .= '<a class="button taxmod-square" href="' . esc_url(wp_nonce_url(add_query_arg(['action' => self::DOWNLOAD, 'purchase' => $purchase->id, 'number' => $number], admin_url('admin-post.php')), self::DOWNLOAD . $purchase->id)) . '" title="' . esc_attr__('Etikett als PDF', 'taxmod-shipping') . '">'
                 . ListPage::icon('pdf', __('Etikett als PDF', 'taxmod-shipping')) . '</a> '
                 . $post(self::PRINT, ListPage::ICON_PRINT, $printers === [] ? __('Etikett drucken', 'taxmod-shipping') : sprintf(/* translators: %s: printer */ __('Etikett drucken auf %s', 'taxmod-shipping'), $printers[0]), '<input type="hidden" name="number" value="' . esc_attr($number) . '">') . ' ';
         }
@@ -457,7 +473,7 @@ final class ShippingPage
      */
     private function stampDialog(): string
     {
-        $formId = 'taxship-stamp-form';
+        $formId = self::STAMP_FORM;
         $line = static fn (string $name, string $label, array $options = []): string => '<label style="display:block;margin:.3em 0"><span style="display:inline-block;width:9em">' . esc_html($label) . '</span>'
             . ListPage::field(InputKind::Line, $name, '', $options + ['form' => $formId, 'size' => '24', 'id' => 'taxship-stamp-' . preg_replace('/\W+/', '-', $name)]) . '</label>';
         $letters = '';
@@ -480,11 +496,15 @@ final class ShippingPage
             . '<input type="hidden" name="mail_cart" value="" form="' . esc_attr($formId) . '"><input type="hidden" name="carrier" value="' . esc_attr(LetterRates::CARRIER) . '" form="' . esc_attr($formId) . '">'
             . '<p class="description" data-taxship-stamp-address data-label="' . esc_attr__('Anschrift auf der Marke (nur zur Ansicht, wird nicht gespeichert):', 'taxmod-shipping') . '"></p>';
 
-        return '<form id="' . esc_attr($formId) . '" method="post" action="' . esc_url(admin_url('admin-post.php')) . '" data-taxship-stamp-form>'
+        return ListPage::dialogAction(self::STAMP_SWITCH, __('Marke im Shop gekauft', 'taxmod-shipping'), __('Gekaufte Marke hochladen', 'taxmod-shipping'), $body, 'action', self::STAMP, __('Eintragen und drucken', 'taxmod-shipping'), self::STAMP_FORM);
+    }
+
+    /** The stamp dialog's own form, empty: its fields join it by their form attribute, so it may stand outside any other form. */
+    private function stampForm(): string
+    {
+        return '<form id="' . esc_attr(self::STAMP_FORM) . '" method="post" action="' . esc_url(admin_url('admin-post.php')) . '" data-taxship-stamp-form>'
             . wp_nonce_field(self::STAMP, '_wpnonce', true, false)
-            . '<input type="hidden" name="action" value="' . esc_attr(self::STAMP) . '"></form>'
-            . '<div style="display:flex;gap:.5em;align-items:center;margin:.5em 0">' . ListPage::dialogAction('taxship-stamp', __('Gekaufte Marke hochladen', 'taxmod-shipping'), __('Gekaufte Marke hochladen', 'taxmod-shipping'), $body, 'action', self::STAMP, __('Eintragen und drucken', 'taxmod-shipping'), $formId, 'upload')
-            . '<span class="description">' . esc_html__('Marke im Shop der Post gekauft? Hier hochladen, eintragen und auf 62 mm drucken.', 'taxmod-shipping') . '</span></div>';
+            . '<input type="hidden" name="action" value="' . esc_attr(self::STAMP) . '"></form>';
     }
 
     /** admin-post «Eintragen und drucken» (D-1507): capability → nonce → validate → record. The print happened in the browser. */

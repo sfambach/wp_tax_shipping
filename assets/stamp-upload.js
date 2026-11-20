@@ -76,6 +76,17 @@
 		return match ? match.value : (found.registered ? registered : '');
 	}
 
+	// A PDF this site hands to the browser (a mail's label, a kept stamp); a refusal comes back as a page and is shown.
+	async function pdfFrom(url) {
+		var response = await fetch(url, { credentials: 'same-origin' });
+
+		if (!response.ok || response.headers.get('Content-Type') !== 'application/pdf') {
+			throw new Error((await response.text()).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200));
+		}
+
+		return new Blob([await response.arrayBuffer()], { type: 'application/pdf' });
+	}
+
 	// A PDF from the disk or from a mail: read, and the dialog filled from its lines.
 	async function load(file, name) {
 		chosen = file;
@@ -125,16 +136,11 @@
 		button.disabled = true;
 
 		try {
-			var response = await fetch(button.getAttribute('data-taxship-mail-pdf'), { credentials: 'same-origin' });
-
-			if (!response.ok || response.headers.get('Content-Type') !== 'application/pdf') {
-				throw new Error((await response.text()).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200));
-			}
-
+			var pdf = await pdfFrom(button.getAttribute('data-taxship-mail-pdf'));
 			document.querySelector('[data-taxship-stamp-form] + div .taxmod-dialog-open').click();
 			field('mail_cart').value = button.getAttribute('data-taxship-mail-cart');
 			field('carrier').value = button.getAttribute('data-taxship-mail-carrier');
-			await load(new Blob([await response.arrayBuffer()], { type: 'application/pdf' }), button.getAttribute('data-taxship-mail-cart'));
+			await load(pdf, button.getAttribute('data-taxship-mail-cart'));
 		} catch (failure) {
 			window.alert(taxmodLabel62.failed + ' ' + failure.message);
 		} finally {
@@ -160,8 +166,44 @@
 		event.preventDefault();
 		// The Post shop's stamp has corner crosses to cut along; left out, the stamp prints large (Stefan 20.11. «Etwas klein»).
 		taxmodLabel62.run(chosen, '', { cutMarks: field('carrier').value === 'post' }).then(function () {
+			return keep(chosen);
+		}).then(function () {
 			form.dataset.printed = '1';
 			form.submit();
 		});
+	});
+
+	// D-1513 (Stefan 20.11. «Kannst du es dann nicht einfach speichern?»): the PDF goes with the form, sealed and kept by the
+	// Etiketten module, so the stamp is printed again from its row without choosing the file.
+	function keep(file) {
+		return new Promise(function (done) {
+			var reader = new FileReader();
+			reader.onload = function () {
+				field('stamp_pdf').value = String(reader.result).split(',')[1] || '';
+				done();
+			};
+			reader.onerror = function () { done(); };
+			reader.readAsDataURL(file);
+		});
+	}
+
+	// A kept stamp printed again from its row: the server hands the PDF back from the store.
+	document.addEventListener('click', async function (event) {
+		var button = event.target.closest('[data-taxship-kept-pdf]');
+
+		if (!button) {
+			return;
+		}
+
+		event.preventDefault();
+		button.disabled = true;
+
+		try {
+			await taxmodLabel62.run(await pdfFrom(button.getAttribute('data-taxship-kept-pdf')), '', { cutMarks: button.getAttribute('data-taxship-carrier') === 'post' });
+		} catch (failure) {
+			window.alert(taxmodLabel62.failed + ' ' + failure.message);
+		} finally {
+			button.disabled = false;
+		}
 	});
 }());

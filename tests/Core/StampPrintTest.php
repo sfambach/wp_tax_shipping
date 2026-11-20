@@ -15,7 +15,7 @@ final class StampPrintTest extends TestCase
 
         self::assertSame('taxmod-label62', ShippingPage::LABEL62);
         self::assertStringContainsString("wp_script_is(self::LABEL62, 'registered')", $page);
-        self::assertSame(4, substr_count($page, 'self::canPrintPostage()'), 'Mail list, upload dialog, enqueue and row button all ask whether the script is there.');
+        self::assertSame(5, substr_count($page, 'self::canPrintPostage()'), 'Mail list, upload dialog, enqueue, kept-stamp and row button all ask whether the script is there.');
         self::assertDirectoryDoesNotExist($root . '/assets/pdfjs');
         self::assertStringNotContainsString('pdfjs', $page);
     }
@@ -56,11 +56,15 @@ final class StampPrintTest extends TestCase
         $script = (string) file_get_contents(dirname(__DIR__, 2) . '/assets/stamp-upload.js');
 
         self::assertStringContainsString('->add($purchase, null,', $page, 'D-1507: no parcel is guessed for an uploaded stamp.');
-        // D-1511: the one fetch brings a mail's label PDF from this site into the browser; nothing is sent out of it.
+        // D-1511: the one fetch brings a PDF from this site into the browser (a mail's label, D-1513 a kept stamp).
+        // D-1513: the stamp leaves the browser only with the form, as base64 in one hidden field, after it was printed.
         self::assertDoesNotMatchRegularExpression('/XMLHttpRequest|FormData|method:\s*.POST/', $script, 'The PDF never leaves the browser.');
         self::assertSame(1, preg_match_all('/\bfetch\s*\(/', $script));
-        self::assertStringContainsString("fetch(button.getAttribute('data-taxship-mail-pdf')", $script);
+        self::assertStringContainsString("pdfFrom(button.getAttribute('data-taxship-mail-pdf'))", $script);
         self::assertStringContainsString('taxmodLabel62.run(chosen', $script);
+        self::assertStringContainsString("field('stamp_pdf').value", $script);
+        self::assertStringContainsString("apply_filters(self::POSTAGE_PUT, false, self::postageKey(\$id), \$pdf)", $page);
+        self::assertStringNotContainsString('file_put_contents', $page, 'D-1513: the one store of postage PDFs is the Etiketten module\'s.');
 
         // D-1511: choosing and reading the PDF is the label module's building block; this script only fills fields from its lines.
         self::assertStringContainsString('taxmodLabel62.lines(', $script);

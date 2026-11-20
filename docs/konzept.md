@@ -110,3 +110,7 @@ flowchart LR
 OFFEN: Ob die Post nach einem Kauf im Shop eine Mail mit der Marke schickt, ist nicht geprüft. Bis dahin kommen in «Aus Mails» nur DHL-Online-Frankierungen.
 
 Vorlage (Stefan 20.11. 15:33, «das mit dem -1 ist albern nim doch die richtigen masse»): Die Vorlage füllt das echte Höchstgewicht, nicht mehr «− 1 g».
+
+## Marke gespeichert (D-1513)
+
+Stefan 20.11. 16:23: «Kannst du es dann nicht einfach speichern?» Nach «Eintragen und drucken» geht das PDF der Marke mit dem Formular mit (verstecktes Feld, base64). Versand legt es unter dem Schlüssel «taxship-<Sendung>» im Speicher des Etikettenmoduls ab (`taxmod_postage_put`) und meldet es gleich als gedruckt. Die Zeile der Sendung druckt die gespeicherte Marke dann ohne neues Wählen. 14 Tage nach dem Druck löscht das Etikettenmodul das PDF; danach wählt man es wieder von der Platte. Versand schreibt selbst keine Datei, und die Anschrift wird weiter nicht als Feld gespeichert.

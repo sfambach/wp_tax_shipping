@@ -38,7 +38,9 @@ Ein Dienst antwortet nur, wenn `carrier` seiner ist, und gibt sonst die Antwort 
 ## Annahmen (nicht im Beschluss)
 
 - ⚠️ *INFERRED:* Bis «Sendungen» im Modell steht (D-1497), liegen die Käufe in der Option `taxmod_shipping_purchases` (die letzten 200). Danach wird jeder Kauf ein Satz und die Option einmal übernommen und gelöscht.
-- ⚠️ *INFERRED:* Absender, Bestätigungs-Mail und Druckerwarteschlange in der Option `taxmod_shipping_settings`; später Absender als Verweis auf einen Kontakt.
+- Absender ist ein Kontakt-Satz (D-1497). Seine Adresse wird über die vorhandenen Kompositionen gelesen: Kontakt › «Address» › «Street / H#», «Zip/City», «Country» (D-1250). Die Felder werden über Rollen benannt (D-1394), höchstens drei Lesevorgänge. In der Option `taxmod_shipping_settings` stehen nur die Kontakt-Nummer, die Bestätigungs-Mail und die Druckerwarteschlange.
+- ⚠️ *INFERRED:* «Country» ist Freitext. Gängige Namen werden auf ISO-Kürzel abgebildet, ein unbekannter Name geht unverändert an den Dienst.
+- E-Mail am Kontakt gibt es im Modell nicht; sie kommt als Nachtrag zur Karte D-1497.
 - ⚠️ *INFERRED:* Empfänger wird im Kauf-Dialog getippt; später Verweis auf Kontakte (D-1497).
 - Preislisten für Dienste ohne Privat-API (GLS, Hermes, DPD) kommen als Daten ins Modell, nicht in den Code (D-1496), noch nicht gebaut.
 - Sammeldienste (Packlink PRO, Sendcloud, Shipcloud): später, Stefan entscheidet.

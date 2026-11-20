@@ -250,10 +250,6 @@ final class ShippingPage
             throw new ShippingError(__('Empfänger unvollständig: Name, Straße, PLZ und Ort sind nötig.', 'taxmod-shipping'));
         }
 
-        if (! $settings->sender()->isComplete()) {
-            throw new ShippingError(__('Absender fehlt: unter Einstellungen › Versand eintragen.', 'taxmod-shipping'));
-        }
-
         $answer = apply_filters(Plugin::BUY, null, $rate->toArray(), ['sender' => $settings->sender()->toArray(), 'receiver' => $receiver->toArray(), 'email' => $settings->email()]);
         $purchase = Purchase::bought(wp_generate_uuid4(), $rate, $receiver->name, is_array($answer) ? $answer : null, current_time('mysql'));
         (new PurchaseStore())->put($purchase);

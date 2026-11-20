@@ -3,7 +3,7 @@
 namespace TaxmodShipping\WordPress;
 
 use Taxmod\WordPress\Admin\ListPage;
-use TaxmodShipping\Core\Address;
+use TaxmodShipping\Core\ShippingError;
 
 /**
  * «Einstellungen › Versand»: sender address, confirmation e-mail, printer queue. Carrier keys stay in each carrier's
@@ -27,22 +27,28 @@ final class SettingsPage
         }
 
         $settings = new Settings();
-        $sender = $settings->sender();
+        $chosen = $settings->senderContact();
+        $options = '<option value="0">' . esc_html__('— wählen —', 'taxmod-shipping') . '</option>';
+        foreach ((new Contacts())->names() as $id => $name) {
+            $options .= '<option value="' . esc_attr((string) $id) . '"' . selected($id, $chosen, false) . '>' . esc_html($name) . '</option>';
+        }
+        $shown = '';
+        if ($chosen > 0) {
+            try {
+                $address = $settings->sender();
+                $shown = '<p class="description">' . esc_html($address->street . ' ' . $address->number . ', ' . $address->postalCode . ' ' . $address->city . ', ' . $address->country) . '</p>';
+            } catch (ShippingError $failure) {
+                $shown = '<p class="description" style="color:#b32d2e">' . esc_html($failure->getMessage()) . '</p>';
+            }
+        }
         $input = static fn (string $name, string $value, int $max, string $type = 'text'): string => '<input type="' . esc_attr($type) . '" id="taxship-' . esc_attr($name) . '" name="' . esc_attr($name) . '" value="' . esc_attr($value) . '" maxlength="' . $max . '" style="width:20em">';
-        $row = static fn (string $label, string $name, string $value, int $max, string $hint = '', string $type = 'text'): array => ['label' => $label, 'control' => $input($name, $value, $max, $type), 'for' => 'taxship-' . $name, 'hint' => $hint];
 
         $form = '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">' . wp_nonce_field(self::SAVE, '_wpnonce', true, false)
             . '<input type="hidden" name="action" value="' . esc_attr(self::SAVE) . '">'
             . ListPage::form([
-                $row(__('Absender', 'taxmod-shipping'), 'sender_name', $sender->name, 35),
-                $row(__('Zusatz', 'taxmod-shipping'), 'sender_addition', $sender->addition, 35),
-                $row(__('Straße', 'taxmod-shipping'), 'sender_street', $sender->street, 35),
-                $row(__('Hausnummer', 'taxmod-shipping'), 'sender_number', $sender->number, 10),
-                $row(__('PLZ', 'taxmod-shipping'), 'sender_postal_code', $sender->postalCode, 17),
-                $row(__('Ort', 'taxmod-shipping'), 'sender_city', $sender->city, 35),
-                $row(__('Land', 'taxmod-shipping'), 'sender_country', $sender->country, 3, __('ISO-Kürzel, z. B. DE.', 'taxmod-shipping')),
-                $row(__('Bestätigung an', 'taxmod-shipping'), 'email', $settings->email(), 70, __('E-Mail für die Kaufbestätigung des Dienstes.', 'taxmod-shipping'), 'email'),
-                $row(__('Drucker', 'taxmod-shipping'), 'queue', $settings->queue(), 64, __('Druckerwarteschlange der Druck-App für Versandetiketten, z. B. QL-810W_take. Gedruckt wird nur auf Knopfdruck.', 'taxmod-shipping')),
+                ['label' => __('Absender', 'taxmod-shipping'), 'control' => '<select id="taxship-sender_contact" name="sender_contact" style="width:20em">' . $options . '</select>' . $shown, 'for' => 'taxship-sender_contact', 'hint' => __('Ein Kontakt aus den Stammdaten; seine Adresse steht dort.', 'taxmod-shipping')],
+                ['label' => __('Bestätigung an', 'taxmod-shipping'), 'control' => $input('email', $settings->email(), 70, 'email'), 'for' => 'taxship-email', 'hint' => __('E-Mail für die Kaufbestätigung des Dienstes.', 'taxmod-shipping')],
+                ['label' => __('Drucker', 'taxmod-shipping'), 'control' => $input('queue', $settings->queue(), 64), 'for' => 'taxship-queue', 'hint' => __('Druckerwarteschlange der Druck-App für Versandetiketten, z. B. QL-810W_take. Gedruckt wird nur auf Knopfdruck.', 'taxmod-shipping')],
             ], '<button type="submit" class="button button-primary">' . ListPage::icon('saved', __('Speichern', 'taxmod-shipping')) . ' ' . esc_html__('Speichern', 'taxmod-shipping') . '</button>')
             . '</form>';
 
@@ -58,8 +64,13 @@ final class SettingsPage
 
         ListPage::nonce(self::SAVE);
         $text = static fn (string $name): string => sanitize_text_field(wp_unslash((string) ($_POST[$name] ?? '')));
-        $sender = new Address($text('sender_name'), $text('sender_street'), $text('sender_number'), $text('sender_postal_code'), $text('sender_city'), strtoupper($text('sender_country')) ?: 'DE', '', $text('sender_addition'));
-        (new Settings())->save($sender, sanitize_email($text('email')), (string) preg_replace('/[^A-Za-z0-9_.\-]/', '', $text('queue')));
+        $contact = absint($_POST['sender_contact'] ?? 0);
+
+        if ($contact > 0 && ! isset((new Contacts())->names()[$contact])) {
+            throw new ShippingError(__('Diesen Kontakt gibt es nicht.', 'taxmod-shipping'));
+        }
+
+        (new Settings())->save($contact, sanitize_email($text('email')), (string) preg_replace('/[^A-Za-z0-9_.\-]/', '', $text('queue')));
 
         return self::url();
     }

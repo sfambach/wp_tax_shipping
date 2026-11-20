@@ -47,6 +47,7 @@ final class Plugin
             }
 
             add_filter('taxmod_logistics_pages', self::pages(...));
+            Contacts::register();
 
             if (\Taxmod\WordPress\Plugin::handlesAdminActions()) {
                 $page = new ShippingPage();

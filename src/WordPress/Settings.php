@@ -3,18 +3,29 @@
 namespace TaxmodShipping\WordPress;
 
 use TaxmodShipping\Core\Address;
+use TaxmodShipping\Core\ShippingError;
 
 /**
- * The sender address, the confirmation e-mail and the printer queue for labels, kept in one option.
- * ⚠️ *INFERRED: until the model has «Sendungen» (D-1497) the sender is not a contact record; the address lives here.*
+ * The sender — a contact record (D-1497), its address read from the model — the confirmation e-mail and the printer
+ * queue for labels.
  */
 final class Settings
 {
     public const OPTION = 'taxmod_shipping_settings';
 
+    public function senderContact(): int
+    {
+        return (int) ($this->all()['sender_contact'] ?? 0);
+    }
+
+    /** @throws ShippingError when no contact is chosen or its address is incomplete */
     public function sender(): Address
     {
-        return Address::fromArray(is_array($this->all()['sender'] ?? null) ? $this->all()['sender'] : []);
+        if ($this->senderContact() === 0) {
+            throw new ShippingError(__('Absender fehlt: unter Einstellungen › Versand einen Kontakt wählen.', 'taxmod-shipping'));
+        }
+
+        return (new Contacts())->address($this->senderContact());
     }
 
     public function email(): string
@@ -27,9 +38,9 @@ final class Settings
         return (string) ($this->all()['queue'] ?? '');
     }
 
-    public function save(Address $sender, string $email, string $queue): void
+    public function save(int $senderContact, string $email, string $queue): void
     {
-        update_option(self::OPTION, ['sender' => $sender->toArray(), 'email' => $email, 'queue' => $queue], false);
+        update_option(self::OPTION, ['sender_contact' => $senderContact, 'email' => $email, 'queue' => $queue], false);
     }
 
     /** @return array<string, mixed> */

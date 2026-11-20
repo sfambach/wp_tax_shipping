@@ -4,10 +4,11 @@ namespace TaxmodShipping\WordPress;
 
 use Taxmod\Core\Description\InputKind;
 use Taxmod\WordPress\Admin\ListPage;
+use Taxmod\WordPress\Admin\RecordPick;
 use TaxmodShipping\Core\ShippingError;
 
 /**
- * «Einstellungen › Versand»: sender address, confirmation e-mail, printer queue. Carrier keys stay in each carrier's
+ * «Einstellungen › Versand»: sender address, confirmation e-mail, carrier firms. The printer is the workplace's (D-1502). Carrier keys stay in each carrier's
  * own tab (DHL …), never here.
  *
  * @see docs/konzept.md
@@ -29,22 +30,15 @@ final class SettingsPage
 
         $settings = new Settings();
         $chosen = $settings->senderContact();
-        $names = (new Contacts())->names();
-        $choice = static function (int $selected) use ($names): string {
-            $html = '<option value="0">' . esc_html__('— wählen —', 'taxmod-shipping') . '</option>';
-            foreach ($names as $id => $name) {
-                $html .= '<option value="' . esc_attr((string) $id) . '"' . selected($id, $selected, false) . '>' . esc_html($name) . '</option>';
-            }
-
-            return $html;
-        };
-        $options = $choice($chosen);
+        // D-1488: the modeller's chooser with search and tree, one read of the contacts for every chooser on the page.
+        $tree = (new Contacts())->pickTree();
+        $choice = static fn (string $name, int $selected): string => RecordPick::field($name, $tree, $selected > 0 ? $selected : null);
         $firms = $settings->carrierFirms();
         $carrierRows = [];
         foreach (Plugin::carriers() as $code => $label) {
             $carrierRows[] = ['label' => sprintf(/* translators: %s: carrier */ __('Firma für %s', 'taxmod-shipping'), $label),
-                'control' => '<select id="taxship-carrier-' . esc_attr($code) . '" name="carrier_firms[' . esc_attr($code) . ']" style="width:20em">' . $choice($firms[$code] ?? 0) . '</select>',
-                'for' => 'taxship-carrier-' . $code, 'hint' => __('Der Kontakt, der in «Sendungen» als Dienst steht.', 'taxmod-shipping')];
+                'control' => $choice('carrier_firms[' . $code . ']', $firms[$code] ?? 0),
+                'hint' => __('Der Kontakt, der in «Sendungen» als Dienst steht.', 'taxmod-shipping')];
         }
         $shown = '';
         if ($chosen > 0) {
@@ -60,9 +54,8 @@ final class SettingsPage
         $form = '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">' . wp_nonce_field(self::SAVE, '_wpnonce', true, false)
             . '<input type="hidden" name="action" value="' . esc_attr(self::SAVE) . '">'
             . ListPage::form([
-                ['label' => __('Absender', 'taxmod-shipping'), 'control' => '<select id="taxship-sender_contact" name="sender_contact" style="width:20em">' . $options . '</select>' . $shown, 'for' => 'taxship-sender_contact', 'hint' => __('Ein Kontakt aus den Stammdaten; seine Adresse steht dort.', 'taxmod-shipping')],
+                ['label' => __('Absender', 'taxmod-shipping'), 'control' => $choice('sender_contact', $chosen) . $shown, 'hint' => __('Ein Kontakt aus den Stammdaten; seine Adresse steht dort.', 'taxmod-shipping')],
                 ['label' => __('Bestätigung an', 'taxmod-shipping'), 'control' => $input('email', $settings->email(), InputKind::Email), 'for' => 'taxship-email', 'hint' => __('E-Mail für die Kaufbestätigung des Dienstes.', 'taxmod-shipping')],
-                ['label' => __('Drucker', 'taxmod-shipping'), 'control' => $input('queue', $settings->queue()), 'for' => 'taxship-queue', 'hint' => __('Druckerwarteschlange der Druck-App für Versandetiketten, z. B. QL-810W_take. Gedruckt wird nur auf Knopfdruck.', 'taxmod-shipping')],
                 ...$carrierRows,
             ], '<button type="submit" class="button button-primary">' . ListPage::icon('saved', __('Speichern', 'taxmod-shipping')) . ' ' . esc_html__('Speichern', 'taxmod-shipping') . '</button>')
             . '</form>';
@@ -93,7 +86,13 @@ final class SettingsPage
             }
         }
 
-        (new Settings())->save($contact, sanitize_email($text('email')), (string) preg_replace('/[^A-Za-z0-9_.\-]/', '', $text('queue')), array_filter($firms));
+        // A purchase finds its carrier through its firm; one firm for two carriers would mix them up.
+        $taken = array_filter($firms);
+        if (count($taken) !== count(array_unique($taken))) {
+            throw new ShippingError(__('Jeder Dienst braucht eine eigene Firma, z. B. «DHL» und «Deutsche Post».', 'taxmod-shipping'));
+        }
+
+        (new Settings())->save($contact, sanitize_email($text('email')), array_filter($firms));
 
         return self::url();
     }

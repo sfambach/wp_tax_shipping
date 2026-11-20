@@ -6,8 +6,8 @@ use TaxmodShipping\Core\Address;
 use TaxmodShipping\Core\ShippingError;
 
 /**
- * The sender — a contact record (D-1497), its address read from the model — the confirmation e-mail and the printer
- * queue for labels.
+ * The sender — a contact record (D-1497), its address read from the model — the confirmation e-mail and the carrier
+ * firms. The printer is not kept here: it is the workplace's (D-1502).
  */
 final class Settings
 {
@@ -33,10 +33,6 @@ final class Settings
         return (string) ($this->all()['email'] ?? '');
     }
 
-    public function queue(): string
-    {
-        return (string) ($this->all()['queue'] ?? '');
-    }
 
     /** @return array<string, int> carrier code → firm record (D-1497: «Dienst» is a firm) */
     public function carrierFirms(): array
@@ -47,9 +43,9 @@ final class Settings
     }
 
     /** @param array<string, int> $carrierFirms */
-    public function save(int $senderContact, string $email, string $queue, array $carrierFirms): void
+    public function save(int $senderContact, string $email, array $carrierFirms): void
     {
-        update_option(self::OPTION, ['sender_contact' => $senderContact, 'email' => $email, 'queue' => $queue, 'carrier_firms' => $carrierFirms], false);
+        update_option(self::OPTION, ['sender_contact' => $senderContact, 'email' => $email, 'carrier_firms' => $carrierFirms], false);
     }
 
     /** @return array<string, mixed> */

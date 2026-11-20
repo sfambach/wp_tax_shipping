@@ -38,7 +38,7 @@ Ein Dienst antwortet nur, wenn `carrier` seiner ist, und gibt sonst die Antwort 
 ## Annahmen (nicht im Beschluss)
 
 - Jeder Kauf ist ein Satz in «Sendungen» (D-1497, AR-1), geschrieben über `write-data` als ein Akt, also rückgängig machbar (D-1410). Preis, Gewicht und Maße sind Einheitenwerte (Betrag, Einheit, Vorsatz). Mehrere Sendungsnummern gehen als `{values: [...]}`.
-- Absender ist ein Kontakt-Satz (D-1497). Seine Adresse wird über die vorhandenen Kompositionen gelesen: Kontakt › «Address» › «Street / H#», «Zip/City», «Country» (D-1250). Die Felder werden über Rollen benannt (D-1394), höchstens drei Lesevorgänge. In der Option `taxmod_shipping_settings` stehen nur die Kontakt-Nummer, die Bestätigungs-Mail und die Druckerwarteschlange.
+- Absender ist ein Kontakt-Satz (D-1497). Seine Adresse wird über die vorhandenen Kompositionen gelesen: Kontakt › «Address» › «Street / H#», «Zip/City», «Country» (D-1250). Die Felder werden über Rollen benannt (D-1394), höchstens drei Lesevorgänge. In der Option `taxmod_shipping_settings` stehen nur die Kontakt-Nummer, die Bestätigungs-Mail und die Firmen der Dienste. Gedruckt wird auf dem Standarddrucker des Arbeitsplatzes (D-1502), den das Etikettenmodul über `taxmod_label_catalog` nennt; Versand hält keinen eigenen Drucker (Stefan 20.11. «passt nicht zu unserem Druckkonzept», ab 0.0.4).
 - ⚠️ *INFERRED:* «Country» ist Freitext. Gängige Namen werden auf ISO-Kürzel abgebildet, ein unbekannter Name geht unverändert an den Dienst.
 - «E-Mail» am Kontakt ist Teil von D-1497.
 - Empfänger: vorhandener Kontakt aus der Liste, oder im Kauf-Dialog getippt. Ein getippter Empfänger wird im selben Akt als neuer Person-Kontakt mit Adresse angelegt (D-1497).
@@ -64,3 +64,16 @@ flowchart LR
 - Kauf: Bei uns fließt kein Geld. Stefan hat keine Portokasse, und die Internetmarke-API verkauft nur gegen Portokasse.
 - ⚠️ *INFERRED:* Die Briefpreisliste gilt nur für das Zielland DE.
 - ⚠️ *INFERRED:* Die Vorbelegung (Preise und Maße Stand 1.1.2025) muss Stefan prüfen. Die Produktnummern bleiben leer, bis sie belegt sind.
+
+## Marke auf 62 mm drucken (0.0.4, D-1507)
+
+Eine im Post-Shop gekaufte Internetmarke ist ein A4-PDF auf Stefans Rechner. In der Zeile einer Post-Sendung unter «Gekaufte Etiketten» öffnet der Druckknopf die Dateiwahl. Das Script `taxmod-label62` des Etikettenmoduls liest das PDF im Browser, schneidet Marke und Anschrift zu, dreht sie und öffnet den Druckdialog für das 62-mm-Band des QL-810W. Das PDF wird nicht hochgeladen und nicht gespeichert, und gedruckt wird nur auf Klick. Fehlt das Etikettenmodul, fehlt der Knopf.
+
+```mermaid
+flowchart LR
+  Z["Zeile Post-Sendung: Drucken"] --> W["PDF wählen"]
+  W --> J["taxmod-label62 im Browser"]
+  J --> D["Druckdialog 62 × 100 mm"]
+```
+
+INFERRED: Die Marke trägt keinen Zusatztext (eBay setzt dort Bestellnummer und Verkäufer). Gemessen mit der Marke vom 20.11.2026: 54 × 97 mm.

@@ -65,6 +65,7 @@ final class StampPrintTest extends TestCase
         self::assertStringContainsString("RecordPick::field('receiver_contact'", $dialog);
         self::assertStringContainsString('InputKind::Decimal', $dialog);
         self::assertStringContainsString('->add($purchase, null, $contact,', $page);
+        self::assertStringContainsString("Empfänger (freiwillig)", $dialog, 'Stefan 20.11.: no receiver is forced and none is stored from the stamp.');
         self::assertStringNotContainsString("put('receiver", $script);
     }
 }

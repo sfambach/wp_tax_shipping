@@ -317,10 +317,10 @@ final class ShippingPage
             . '<label style="display:block;margin:.3em 0"><span style="display:inline-block;width:9em">' . esc_html__('Preis', 'taxmod-shipping') . '</span>'
             . ListPage::field(InputKind::Decimal, 'price', '', ['form' => $formId, 'size' => '8', 'id' => 'taxship-stamp-price']) . ' €</label>'
             . $line('number', __('Sendungsnummer', 'taxmod-shipping'))
-            // D-1497/D-1510: the receiver is a contact; a new one is made in the chooser («… anlegen»). The PDF's address is only a hint.
-            . '<div style="margin:.3em 0"><span style="display:inline-block;width:9em">' . esc_html__('Empfänger', 'taxmod-shipping') . '</span>'
+            // D-1510: a receiver, if any, is a contact (D-1497); the stamp's address is shown, never stored (Stefan 20.11., privacy).
+            . '<div style="margin:.3em 0"><span style="display:inline-block;width:9em">' . esc_html__('Empfänger (freiwillig)', 'taxmod-shipping') . '</span>'
             . RecordPick::field('receiver_contact', (new Contacts())->pickTree(), null, $formId) . '</div>'
-            . '<p class="description" data-taxship-stamp-address data-label="' . esc_attr__('Anschrift auf der Marke:', 'taxmod-shipping') . '"></p>';
+            . '<p class="description" data-taxship-stamp-address data-label="' . esc_attr__('Anschrift auf der Marke (nur zur Ansicht, wird nicht gespeichert):', 'taxmod-shipping') . '"></p>';
 
         return '<form id="' . esc_attr($formId) . '" method="post" action="' . esc_url(admin_url('admin-post.php')) . '" data-taxship-stamp-form>'
             . wp_nonce_field(self::STAMP, '_wpnonce', true, false)
@@ -344,11 +344,12 @@ final class ShippingPage
         }
 
         $settings = new Settings();
+        // Stefan 20.11.: the receiver is optional and never made from the stamp — no address is kept unless he picks a contact.
         $contact = absint($_POST['receiver_contact'] ?? 0);
-        $name = (new Contacts())->names()[$contact] ?? '';
+        $name = $contact > 0 ? ((new Contacts())->names()[$contact] ?? '') : '';
 
-        if ($name === '') {
-            throw new ShippingError(__('Bitte den Empfänger als Kontakt wählen oder im Wähler anlegen.', 'taxmod-shipping'));
+        if ($contact > 0 && $name === '') {
+            throw new ShippingError(__('Diesen Kontakt gibt es nicht.', 'taxmod-shipping'));
         }
 
         $firm = $settings->carrierFirms()[LetterRates::CARRIER] ?? 0;

@@ -16,8 +16,8 @@ use TaxmodShipping\Core\ParcelInput;
  */
 final class ParcelControls
 {
-    /** typed() and controls() carry parts both ways, two levels deep (Modeller 0.2.188–0.2.190). */
-    public const MIN_MODELLER = '0.2.190';
+    /** typed() and controls() carry parts both ways, two levels deep (Modeller 0.2.188–0.2.190), drawn compact from 0.2.191. */
+    public const MIN_MODELLER = '0.2.191';
 
     public const PREFIX = 'taxship_parcel';
 

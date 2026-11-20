@@ -2,6 +2,7 @@
 
 namespace TaxmodShipping\WordPress;
 
+use Taxmod\Core\Description\InputKind;
 use Taxmod\WordPress\Admin\ListPage;
 use TaxmodShipping\Core\ShippingError;
 
@@ -54,14 +55,14 @@ final class SettingsPage
                 $shown = '<p class="description" style="color:#b32d2e">' . esc_html($failure->getMessage()) . '</p>';
             }
         }
-        $input = static fn (string $name, string $value, int $max, string $type = 'text'): string => '<input type="' . esc_attr($type) . '" id="taxship-' . esc_attr($name) . '" name="' . esc_attr($name) . '" value="' . esc_attr($value) . '" maxlength="' . $max . '" style="width:20em">';
+        $input = static fn (string $name, string $value, InputKind $kind = InputKind::Line): string => ListPage::field($kind, $name, $value, ['id' => 'taxship-' . $name, 'size' => '30']);
 
         $form = '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">' . wp_nonce_field(self::SAVE, '_wpnonce', true, false)
             . '<input type="hidden" name="action" value="' . esc_attr(self::SAVE) . '">'
             . ListPage::form([
                 ['label' => __('Absender', 'taxmod-shipping'), 'control' => '<select id="taxship-sender_contact" name="sender_contact" style="width:20em">' . $options . '</select>' . $shown, 'for' => 'taxship-sender_contact', 'hint' => __('Ein Kontakt aus den Stammdaten; seine Adresse steht dort.', 'taxmod-shipping')],
-                ['label' => __('Bestätigung an', 'taxmod-shipping'), 'control' => $input('email', $settings->email(), 70, 'email'), 'for' => 'taxship-email', 'hint' => __('E-Mail für die Kaufbestätigung des Dienstes.', 'taxmod-shipping')],
-                ['label' => __('Drucker', 'taxmod-shipping'), 'control' => $input('queue', $settings->queue(), 64), 'for' => 'taxship-queue', 'hint' => __('Druckerwarteschlange der Druck-App für Versandetiketten, z. B. QL-810W_take. Gedruckt wird nur auf Knopfdruck.', 'taxmod-shipping')],
+                ['label' => __('Bestätigung an', 'taxmod-shipping'), 'control' => $input('email', $settings->email(), InputKind::Email), 'for' => 'taxship-email', 'hint' => __('E-Mail für die Kaufbestätigung des Dienstes.', 'taxmod-shipping')],
+                ['label' => __('Drucker', 'taxmod-shipping'), 'control' => $input('queue', $settings->queue()), 'for' => 'taxship-queue', 'hint' => __('Druckerwarteschlange der Druck-App für Versandetiketten, z. B. QL-810W_take. Gedruckt wird nur auf Knopfdruck.', 'taxmod-shipping')],
                 ...$carrierRows,
             ], '<button type="submit" class="button button-primary">' . ListPage::icon('saved', __('Speichern', 'taxmod-shipping')) . ' ' . esc_html__('Speichern', 'taxmod-shipping') . '</button>')
             . '</form>';

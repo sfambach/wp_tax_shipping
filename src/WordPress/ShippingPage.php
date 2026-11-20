@@ -2,6 +2,7 @@
 
 namespace TaxmodShipping\WordPress;
 
+use Taxmod\Core\Description\InputKind;
 use Taxmod\WordPress\Admin\ListPage;
 use Taxmod\WordPress\ModelDoor;
 use TaxmodShipping\Core\Address;
@@ -84,7 +85,7 @@ final class ShippingPage
     private function parcelForm(Parcel|string|null $parcel): string
     {
         $value = static fn (string $field): string => isset($_GET[$field]) ? sanitize_text_field(wp_unslash((string) $_GET[$field])) : '';
-        $number = static fn (string $field, string $unit): string => '<input type="number" min="1" step="1" required id="taxship-' . esc_attr($field) . '" name="' . esc_attr($field) . '" value="' . esc_attr($value($field)) . '" style="width:8em"> ' . esc_html($unit);
+        $number = static fn (string $field, string $unit): string => ListPage::quantity($field, $unit, $value($field), ['id' => 'taxship-' . $field, 'required' => 'required', 'size' => '8']);
         $country = $value('country') === '' ? 'DE' : $value('country');
 
         return '<form method="get" action="' . esc_url(admin_url('admin.php')) . '">'
@@ -94,7 +95,7 @@ final class ShippingPage
                 ['label' => __('Länge', 'taxmod-shipping'), 'control' => $number('length_cm', 'cm'), 'for' => 'taxship-length_cm'],
                 ['label' => __('Breite', 'taxmod-shipping'), 'control' => $number('width_cm', 'cm'), 'for' => 'taxship-width_cm'],
                 ['label' => __('Höhe', 'taxmod-shipping'), 'control' => $number('height_cm', 'cm'), 'for' => 'taxship-height_cm'],
-                ['label' => __('Zielland', 'taxmod-shipping'), 'control' => '<input type="text" id="taxship-country" name="country" maxlength="3" value="' . esc_attr($country) . '" style="width:5em">', 'for' => 'taxship-country', 'hint' => __('ISO-Kürzel, z. B. DE, AT, NL.', 'taxmod-shipping')],
+                ['label' => __('Zielland', 'taxmod-shipping'), 'control' => ListPage::field(InputKind::Line, 'country', $country, ['id' => 'taxship-country', 'size' => '5']), 'for' => 'taxship-country', 'hint' => __('ISO-Kürzel, z. B. DE, AT, NL.', 'taxmod-shipping')],
             ], '<button type="submit" class="button button-primary">' . ListPage::icon('search', __('Tarife vergleichen', 'taxmod-shipping')) . ' ' . esc_html__('Tarife vergleichen', 'taxmod-shipping') . '</button>')
             . '</form>';
     }
@@ -136,8 +137,8 @@ final class ShippingPage
     private function buyDialog(string $switch, Rate $rate, Parcel $parcel): string
     {
         $formId = $switch . '-form';
-        $field = static fn (string $name, string $label, int $max): string => '<label style="display:block;margin:.3em 0"><span style="display:inline-block;width:9em">' . esc_html($label) . '</span>'
-            . '<input type="text" name="receiver[' . esc_attr($name) . ']" maxlength="' . $max . '" form="' . esc_attr($formId) . '" style="width:16em"></label>';
+        $field = static fn (string $name, string $label): string => '<label style="display:block;margin:.3em 0"><span style="display:inline-block;width:9em">' . esc_html($label) . '</span>'
+            . ListPage::field($name === 'email' ? InputKind::Email : InputKind::Line, 'receiver[' . $name . ']', '', ['form' => $formId, 'size' => '24']) . '</label>';
         $contacts = '<option value="0">' . esc_html__('— neuer Kontakt, unten eintragen —', 'taxmod-shipping') . '</option>';
         foreach ($this->contactNames() as $id => $name) {
             $contacts .= '<option value="' . esc_attr((string) $id) . '">' . esc_html($name) . '</option>';
@@ -156,10 +157,10 @@ final class ShippingPage
         )) . '</p>'
             . '<label style="display:block;margin:.3em 0"><span style="display:inline-block;width:9em">' . esc_html__('Empfänger', 'taxmod-shipping') . '</span>'
             . '<select name="receiver_contact" form="' . esc_attr($formId) . '" style="width:16em">' . $contacts . '</select></label>'
-            . $field('name', __('Name', 'taxmod-shipping'), 35)
-            . $field('street', __('Straße', 'taxmod-shipping'), 35) . $field('number', __('Hausnummer', 'taxmod-shipping'), 10)
-            . $field('postal_code', __('PLZ', 'taxmod-shipping'), 17) . $field('city', __('Ort', 'taxmod-shipping'), 35)
-            . $field('email', __('E-Mail', 'taxmod-shipping'), 70)
+            . $field('name', __('Name', 'taxmod-shipping'))
+            . $field('street', __('Straße', 'taxmod-shipping')) . $field('number', __('Hausnummer', 'taxmod-shipping'))
+            . $field('postal_code', __('PLZ', 'taxmod-shipping')) . $field('city', __('Ort', 'taxmod-shipping'))
+            . $field('email', __('E-Mail', 'taxmod-shipping'))
             . '<input type="hidden" name="receiver[country]" value="' . esc_attr($parcel->country) . '" form="' . esc_attr($formId) . '">';
 
         return '<form id="' . esc_attr($formId) . '" method="post" action="' . esc_url(admin_url('admin-post.php')) . '">'

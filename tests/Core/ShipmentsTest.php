@@ -58,6 +58,14 @@ final class ShipmentsTest extends TestCase
         self::assertArrayHasKey((string) self::id('fields', 'shipment_price'), $values);
     }
 
+    public function testNoReceiverWritesNone(): void
+    {
+        $changes = (new ShipmentChanges(self::roles()))->bought(self::purchase(), null, 0, 77, 0);
+
+        self::assertCount(2, $changes);
+        self::assertArrayNotHasKey((string) self::id('fields', 'shipment_receiver'), $changes[1]['values']);
+    }
+
     public function testStatusSetsStateAndNumbers(): void
     {
         $paid = self::purchase()->withStatus(['state' => 'paid', 'numbers' => ['0034']]);

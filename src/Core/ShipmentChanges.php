@@ -37,7 +37,8 @@ final class ShipmentChanges
             $changes[] = ['op' => 'set_values', 'record' => '@receiver', 'values' => $this->contactValues($receiver)];
             $receiverValue = '@receiver';
         } else {
-            $receiverValue = (string) $receiver;
+            // D-1510, Stefan 20.11.: a stamp from the Post shop may go without a stored receiver (privacy) — then none is written.
+            $receiverValue = $receiver > 0 ? (string) $receiver : '';
         }
 
         $values = array_filter([

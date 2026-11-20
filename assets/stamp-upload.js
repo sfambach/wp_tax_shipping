@@ -130,7 +130,7 @@
 				put('product', product(found));
 				put('price', found.price);
 				put('number', found.number);
-				// D-1510: the receiver is chosen as a contact; the address on the stamp is shown to find or make it.
+				// D-1510: the address on the stamp is only shown; the receiver contact is optional and nothing is stored from the stamp.
 				var address = document.querySelector('[data-taxship-stamp-address]');
 				var shown = [found.name, found.addition, [found.street, found.house].filter(Boolean).join(' '), [found.postal_code, found.city].filter(Boolean).join(' ')].filter(Boolean);
 				address.textContent = shown.length ? address.getAttribute('data-label') + ' ' + shown.join(', ') : '';
@@ -151,10 +151,9 @@
 		}
 
 		// Nothing is printed for an entry the server will refuse: it then says what is missing.
-		var contact = document.querySelector('[form="taxship-stamp-form"][name="receiver_contact"]:checked');
 		var price = field('price');
 
-		if (!contact || !parseInt(contact.value, 10) || !field('product').value.trim() || !price || !price.value.trim()) {
+		if (!field('product').value.trim() || !price || !price.value.trim()) {
 			return;
 		}
 

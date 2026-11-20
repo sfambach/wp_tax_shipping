@@ -276,7 +276,7 @@ final class ShippingPage
         foreach (MailLabels::open(apply_filters(self::MAIL_LABELS, []), $references) as $label) {
             $pdf = wp_nonce_url(add_query_arg(['action' => self::MAIL_PDF, 'link' => rawurlencode($label['link'])], admin_url('admin-post.php')), self::MAIL_PDF);
             $rows[] = [
-                esc_html($label['date'] === '' ? '' : wp_date((string) get_option('date_format'), (int) strtotime($label['date']))),
+                esc_html(ListPage::date($label['date'])),
                 esc_html(strtoupper($label['carrier'])),
                 esc_html($label['cart']),
                 '<button type="button" class="button" data-taxship-mail-pdf="' . esc_url($pdf) . '" data-taxship-mail-cart="' . esc_attr($label['cart']) . '" data-taxship-mail-carrier="' . esc_attr($label['carrier']) . '" title="' . esc_attr__('Sendung anlegen und drucken', 'taxmod-shipping') . '">'

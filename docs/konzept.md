@@ -114,3 +114,11 @@ Vorlage (Stefan 20.11. 15:33, «das mit dem -1 ist albern nim doch die richtigen
 ## Marke gespeichert (D-1513)
 
 Stefan 20.11. 16:23: «Kannst du es dann nicht einfach speichern?» Nach «Eintragen und drucken» geht das PDF der Marke mit dem Formular mit (verstecktes Feld, base64). Versand legt es unter dem Schlüssel «taxship-<Sendung>» im Speicher des Etikettenmoduls ab (`taxmod_postage_put`) und meldet es gleich als gedruckt. Die Zeile der Sendung druckt die gespeicherte Marke dann ohne neues Wählen. 14 Tage nach dem Druck löscht das Etikettenmodul das PDF; danach wählt man es wieder von der Platte. Versand schreibt selbst keine Datei, und die Anschrift wird weiter nicht als Feld gespeichert.
+
+## Eine Liste «Etiketten» (D-1515)
+
+Stefan 20.11. 16:26: «Eigentlich könnten wir ja auch eine Liste draus machen … Und dann hat sie noch eine Eigenschaft aus Mail oder hochgeladen.» «Aus Mails» und «Gekaufte Etiketten» sind jetzt eine Liste «Etiketten». Die Versandseite zeigt die neuesten 5, «Alle n Etiketten» öffnet dieselbe Liste ohne Grenze, und der Produktname öffnet die Einzelansicht (Status, «← Alle Etiketten», Aktionen, Daten).
+
+Die Herkunft hat kein eigenes Feld. `LabelOrigin` liest sie an genau einer Stelle aus der Referenz der Sendung: «mail-…» aus Mail, «upload-…» hochgeladen, «shop-…» im Shop gekauft, sonst beim Dienst gekauft. Eine offene Marke aus einer Mail steht mit Stand «offen (aus Mail)» in derselben Liste. Wird daraus eine Sendung, trägt diese die Referenz «mail-<Warenkorb>», und die offene Zeile fällt weg; so erscheint keine Marke doppelt (`LabelRowsTest`).
+
+INFERRED: Marken, die vor D-1515 hochgeladen wurden, tragen noch «shop-…» und heißen deshalb «im Shop gekauft».

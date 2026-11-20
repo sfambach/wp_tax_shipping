@@ -21,7 +21,7 @@ use Taxmod\WordPress\Admin\ListPage;
  */
 final class Plugin
 {
-    public const VERSION      = '0.0.12';
+    public const VERSION      = '0.0.13';
     public const MIN_MODELLER = '0.2.172';
     public const SLUG         = 'taxmod-versand';
     public const SETTINGS     = 'taxmod-versand-einstellungen';

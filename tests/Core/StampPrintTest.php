@@ -15,7 +15,7 @@ final class StampPrintTest extends TestCase
 
         self::assertSame('taxmod-label62', ShippingPage::LABEL62);
         self::assertStringContainsString("wp_script_is(self::LABEL62, 'registered')", $page);
-        self::assertSame(5, substr_count($page, 'self::canPrintPostage()'), 'Mail list, upload dialog, enqueue, kept-stamp and row button all ask whether the script is there.');
+        self::assertSame(6, substr_count($page, 'self::canPrintPostage()'), 'Front and full list (upload dialog, mail labels), enqueue, kept-stamp and row button all ask whether the script is there.');
         self::assertDirectoryDoesNotExist($root . '/assets/pdfjs');
         self::assertStringNotContainsString('pdfjs', $page);
     }

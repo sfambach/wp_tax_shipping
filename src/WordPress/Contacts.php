@@ -85,28 +85,64 @@ final class Contacts
      */
     public function names(): array
     {
-        $roles = ModelDoor::roles();
-        $root = $roles->find('nodes', 'contact') ?? 0;
+        return array_map(static fn (array $contact): string => $contact['name'], $this->read()['contacts']);
+    }
+
+    /**
+     * D-1488: the contacts as the modeller's chooser wants them — the node tree under Kontakt, each node with its contacts by name.
+     *
+     * @return list<array{depth: int, name: string, records: array<int, string>, node: int}>
+     */
+    public function pickTree(): array
+    {
+        $read = $this->read();
+        $records = [];
+        foreach ($read['contacts'] as $id => $contact) {
+            $records[$contact['node']][$id] = $contact['name'];
+        }
+
+        $depth = [];
+        $rows = [];
+        foreach ($read['tree'] as $node => $row) {
+            $depth[$node] = isset($depth[$row['parent']]) ? $depth[$row['parent']] + 1 : 0;
+            $rows[] = ['depth' => $depth[$node], 'name' => $row['name'], 'records' => $records[$node] ?? [], 'node' => $node];
+        }
+
+        return $rows;
+    }
+
+    /** @var array{tree: array<int, array{name: string, parent: int, class: string, hidden: bool}>, contacts: array<int, array{name: string, node: int}>}|null */
+    private ?array $read = null;
+
+    /** @return array{tree: array<int, array{name: string, parent: int, class: string, hidden: bool}>, contacts: array<int, array{name: string, node: int}>} */
+    private function read(): array
+    {
+        if ($this->read !== null) {
+            return $this->read;
+        }
+
+        $root = ModelDoor::roles()->find('nodes', 'contact') ?? 0;
 
         if ($root === 0) {
-            return [];
+            return $this->read = ['tree' => [], 'contacts' => []];
         }
 
         $door = new ModelDoor();
-        $records = array_keys($door->recordsOf(array_keys($door->subtree($root)['steps']), 5000));
+        $tree = $door->tree($root);
+        $nodeOf = $door->recordsOf(array_keys($tree), 5000);
         $fields = $this->fields();
-        $names = [];
+        $contacts = [];
 
-        foreach ($records === [] ? [] : $door->valuesOf($records) as $id => $values) {
+        foreach ($nodeOf === [] ? [] : $door->valuesOf(array_keys($nodeOf)) as $id => $values) {
             $name = trim(($values[$fields['contact_first_name'] ?? 0][0] ?? '') . ' ' . ($values[$fields['firm_name'] ?? 0][0] ?? ''));
             if ($name !== '') {
-                $names[(int) $id] = $name;
+                $contacts[(int) $id] = ['name' => $name, 'node' => (int) $nodeOf[$id]];
             }
         }
 
-        asort($names, SORT_NATURAL | SORT_FLAG_CASE);
+        uasort($contacts, static fn (array $a, array $b): int => strnatcasecmp($a['name'], $b['name']));
 
-        return $names;
+        return $this->read = ['tree' => $tree, 'contacts' => $contacts];
     }
 
     /** @return array<string, int> */

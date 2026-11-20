@@ -6,6 +6,7 @@ use Taxmod\Core\Description\InputKind;
 use Taxmod\WordPress\Admin\ListPage;
 use Taxmod\WordPress\ModelDoor;
 use TaxmodShipping\Core\Address;
+use TaxmodShipping\Core\LetterRates;
 use TaxmodShipping\Core\Money;
 use TaxmodShipping\Core\Parcel;
 use TaxmodShipping\Core\Purchase;
@@ -29,6 +30,11 @@ final class ShippingPage
 
     /** admin-post action → method */
     public const ACTS = [self::BUY => 'buy', self::STATUS => 'status', self::PRINT => 'printLabel', self::DOWNLOAD => 'download', self::REMOVE => 'remove'];
+
+    /** D-1507: the Etiketten module's 62 mm postage print, attached by its handle only. */
+    public const LABEL62 = 'taxmod-label62';
+
+    private ?WorkplacePrinters $printers = null;
 
     private const PARCEL_FIELDS = ['weight_g', 'length_cm', 'width_cm', 'height_cm'];
 
@@ -54,6 +60,10 @@ final class ShippingPage
         }
 
         $sections[] = ['title' => __('Gekaufte Etiketten', 'taxmod-shipping'), 'html' => $this->purchases()];
+
+        if (self::canPrintPostage()) {
+            wp_enqueue_script(self::LABEL62);
+        }
 
         return ListPage::page(__('Versand', 'taxmod-shipping'), [], $sections, Plugin::VERSION, 'Taxmod Versand');
     }
@@ -260,10 +270,22 @@ final class ShippingPage
 
         $html .= $post(self::STATUS, 'update', __('Stand abfragen', 'taxmod-shipping')) . ' ';
 
+        // D-1507: a stamp bought in the Post shop is a PDF on the owner's disk; the browser crops it to 62 mm and prints it on his click.
+        if ($purchase->rate->carrier === LetterRates::CARRIER) {
+            if (self::canPrintPostage()) {
+                $html .= '<button type="button" class="button" data-taxmod-label62-pick="" title="' . esc_attr__('Marke aus dem Post-Shop drucken (PDF wählen, 62 mm)', 'taxmod-shipping') . '">'
+                    . ListPage::icon(ListPage::ICON_PRINT, __('Marke aus dem Post-Shop drucken (PDF wählen, 62 mm)', 'taxmod-shipping')) . '</button> ';
+            }
+
+            return $html . $post(self::REMOVE, ListPage::ICON_DELETE, __('Sendung löschen (rückgängig machbar)', 'taxmod-shipping'));
+        }
+
+        $printers = array_values(array_column(($this->printers ??= new WorkplacePrinters())->all(), 'name'));
+
         foreach ($purchase->isPaid() ? $purchase->numbers : [] as $number) {
             $html .= '<a class="button" href="' . esc_url(wp_nonce_url(add_query_arg(['action' => self::DOWNLOAD, 'purchase' => $purchase->id, 'number' => $number], admin_url('admin-post.php')), self::DOWNLOAD . $purchase->id)) . '" title="' . esc_attr__('Etikett als PDF', 'taxmod-shipping') . '">'
                 . ListPage::icon('pdf', __('Etikett als PDF', 'taxmod-shipping')) . '</a> '
-                . $post(self::PRINT, ListPage::ICON_PRINT, __('Etikett drucken', 'taxmod-shipping'), '<input type="hidden" name="number" value="' . esc_attr($number) . '">') . ' ';
+                . $post(self::PRINT, ListPage::ICON_PRINT, $printers === [] ? __('Etikett drucken', 'taxmod-shipping') : sprintf(/* translators: %s: printer */ __('Etikett drucken auf %s', 'taxmod-shipping'), $printers[0]), '<input type="hidden" name="number" value="' . esc_attr($number) . '">') . ' ';
         }
 
         return $html . $post(self::REMOVE, ListPage::ICON_DELETE, __('Sendung löschen (rückgängig machbar)', 'taxmod-shipping'));
@@ -345,15 +367,16 @@ final class ShippingPage
         return self::url();
     }
 
-    /** Only on the owner's click (D-1496): one job to the printer queue chosen in the settings. */
+    /** Only on the owner's click (D-1496): one job to the default printer of his workplace (D-1502). */
     public function printLabel(): string
     {
         $purchase = $this->purchaseFromPost(self::PRINT);
         $number = $this->numberOf($purchase, $_POST);
-        $queue = (new Settings())->queue();
+        // D-1502: printed on the default printer of the person's workplace, as every label (Stefan 20.11.: no printer of the module's own).
+        $queue = (new WorkplacePrinters())->queue(0);
 
         if ($queue === '') {
-            throw new ShippingError(__('Kein Drucker gewählt: unter Einstellungen › Versand die Druckerwarteschlange eintragen.', 'taxmod-shipping'));
+            throw new ShippingError(__('An deinem Arbeitsplatz steht kein Drucker: unter Einstellungen › Druck › Arbeitsplätze einen zuordnen und ihn unter Benutzereinstellungen wählen.', 'taxmod-shipping'));
         }
 
         (new ModelDoor())->queuePrint($this->label($purchase, $number), 'versand-' . $purchase->rate->carrier, $number, strtoupper($purchase->rate->carrier) . ' ' . $number, 1, ['queue' => $queue]);
@@ -435,6 +458,12 @@ final class ShippingPage
         if (! current_user_can(\Taxmod\WordPress\Plugin::CAPABILITY)) {
             ListPage::fail(__('Keine Berechtigung.', 'taxmod-shipping'), self::url());
         }
+    }
+
+    /** Without the Etiketten module there is no postage print and no button for it. */
+    private static function canPrintPostage(): bool
+    {
+        return wp_script_is(self::LABEL62, 'registered');
     }
 
     private static function euro(int $cents): string

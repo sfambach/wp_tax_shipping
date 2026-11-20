@@ -80,7 +80,7 @@ INFERRED: Die Marke trägt keinen Zusatztext (eBay setzt dort Bestellnummer und 
 
 ## Gekaufte Marke hochladen (0.0.6, D-1507)
 
-Stefan (20.11. 15:06): «kannst du nicht einfach gekaufte marke hochladen machen bei versand». Über «Gekaufte Etiketten» öffnet der Knopf «Gekaufte Marke hochladen» einen Dialog. «PDF wählen» liest die Internetmarke im Browser (pdf.js aus `taxmod-label62`) und füllt Produkt, Preis, Sendungsnummer und Empfänger. «Eintragen und drucken» öffnet erst den 62-mm-Druckdialog, danach legt der Server den Satz in «Sendungen» an: Firma Post, bezahlt, ohne Gewicht und Maße.
+Stefan (20.11. 15:06): «kannst du nicht einfach gekaufte marke hochladen machen bei versand». Über «Gekaufte Etiketten» öffnet der Knopf «Gekaufte Marke hochladen» einen Dialog. «PDF wählen» liest die Internetmarke im Browser (pdf.js aus `taxmod-label62`) und füllt Produkt, Preis (mit €) und Sendungsnummer. Der Empfänger ist ein Kontakt aus dem Wähler (D-1497, D-1510), fehlt er, wird er dort angelegt (D-1509). Die Anschrift auf der Marke steht nur als Hinweis darunter. «Eintragen und drucken» öffnet erst den 62-mm-Druckdialog, danach legt der Server den Satz in «Sendungen» an: Firma Post, bezahlt, ohne Gewicht und Maße.
 
 ```mermaid
 flowchart LR

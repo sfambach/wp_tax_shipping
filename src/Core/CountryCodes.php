@@ -40,4 +40,16 @@ final class CountryCodes
     {
         return (int) (array_search(strtoupper(trim($code)), $this->codes, true) ?: 0);
     }
+
+    /**
+     * D-1537 (Stefan 20.11. «nach kontinenten ordnen»): the list holds continents and the countries under them. A node that
+     * holds others is a heading, never a destination; the countries stay pickable wherever they hang.
+     *
+     * @param array<int, int> $parents node id ⇒ parent id, the list and everything under it
+     * @return list<int> the list itself and every node holding others
+     */
+    public static function groups(int $root, array $parents): array
+    {
+        return array_values(array_unique([$root, ...array_intersect(array_values($parents), array_keys($parents))]));
+    }
 }

@@ -139,3 +139,9 @@ flowchart LR
 
 INFERRED: Die Werte der 7 Vorlagen werden mit einem Datenjob in «Abmessung» kopiert; die alten Felder Länge/Breite/Höhe werden danach geparkt (`remove_field`, Werte bleiben), nicht gelöscht.
 Offen: Gewicht und Abmessung im Vergleichsformular als Modeller-Eingaben, sobald der Baustein «in Basiseinheit» da ist (Prüftor).
+
+## Länder nach Kontinenten (0.0.16, D-1537)
+
+Stefan 20.11. 20:52: «die länderliste mal nach kontinenten ordnen also kontinent als übergeordnetes». Unter «Länder» stehen sieben Kontinente (Klasse Kategorie, Name englisch, Beschriftung je Sprache), darunter die Länder. Die Länder werden verschoben, nicht neu angelegt: ihre Knoten-Ids und Symbole bleiben. `Countries` liest den Baum zwei Ebenen tief, und `CountryCodes::groups` macht die Liste und jeden Knoten mit Kindern im Wähler unwählbar (`CountryCodesTest`).
+
+INFERRED: Zuordnung nach UN M49 (Russland Europa; Türkiye, Zypern, Kaukasus Asien; Grönland, Mittelamerika, Karibik Nordamerika; Antarktis nur AQ).

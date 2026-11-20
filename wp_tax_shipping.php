@@ -3,7 +3,7 @@
 /**
  * Plugin Name:       Taxmod Versand
  * Description:       Shipping for the Taxonomy Modeller: compares the rates of every connected carrier, buys the chosen label on the owner's click and prints it on request.
- * Version:           0.0.1
+ * Version:           0.0.2
  * Requires at least: 6.9
  * Requires PHP:      8.2
  * Author:            Stefan Fambach (SteFam), Claude (Anthropic AI)

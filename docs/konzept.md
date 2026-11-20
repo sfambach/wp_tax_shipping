@@ -122,3 +122,20 @@ Stefan 20.11. 16:26: «Eigentlich könnten wir ja auch eine Liste draus machen �
 Die Herkunft hat kein eigenes Feld. `LabelOrigin` liest sie an genau einer Stelle aus der Referenz der Sendung: «mail-…» aus Mail, «upload-…» hochgeladen, «shop-…» im Shop gekauft, sonst beim Dienst gekauft. Eine offene Marke aus einer Mail steht mit Stand «offen (aus Mail)» in derselben Liste. Wird daraus eine Sendung, trägt diese die Referenz «mail-<Warenkorb>», und die offene Zeile fällt weg; so erscheint keine Marke doppelt (`LabelRowsTest`).
 
 INFERRED: Marken, die vor D-1515 hochgeladen wurden, tragen noch «shop-…» und heißen deshalb «im Shop gekauft».
+
+## Länder und Abmessung (D-1532)
+
+Stefans Karte 20.11. 18:44: das Zielland «sollte man eine Auswahlliste machen … Die Länder sollten wir als Feld, als Konstantenliste anlegen», und für Länge, Breite, Höhe «das kombinierte Feld Abmessung. Das sollte eigentlich überall dafür verwendet werden. Zentimeter ist okay».
+
+```mermaid
+flowchart LR
+  F[Formular] -->|Knoten aus «Länder»| C[CountryCodes] -->|Symbol = ISO| R[Tarifabfrage]
+  S[Sendung] --> A[«Abmessung»] --> L[Länge] & B[Breite] & H[Höhe]
+```
+
+**Länder.** Eine Konstantenliste «Länder» unter Konstanten › Allgemein, je Land ein Knoten. Der Name ist je Sprache beschriftet (D-646), der ISO-Code steht in der Beschriftung «Symbol» (D-1534). Die Liste wird über die Rolle `nodes:countries` gefunden; das Formular wählt mit dem Knotenwähler des Modellers, und `CountryCodes` macht daraus den Code für die Dienste. Ohne die Rolle oder ohne Modeller ab 0.2.185 bleibt das alte Textfeld.
+
+**Abmessung.** Sendungen und Versandverpackungen tragen ein Feld «Abmessung» (Ziel «Dimension»). Die Kanten liegen darin als Einheitswerte in Zentimeter, über die Rollen `dimension_length/width/height`, die auch das Lager benutzt. Rollen: `fields:shipment_dimension`, `fields:packaging_dimension`. Die Vorlagen werden in drei Lesevorgängen gelesen, gleich wie viele (CD-7).
+
+INFERRED: Die Werte der 7 Vorlagen werden mit einem Datenjob in «Abmessung» kopiert; die alten Felder Länge/Breite/Höhe werden danach geparkt (`remove_field`, Werte bleiben), nicht gelöscht.
+Offen: Gewicht und Abmessung im Vergleichsformular als Modeller-Eingaben, sobald der Baustein «in Basiseinheit» da ist (Prüftor).

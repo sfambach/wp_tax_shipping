@@ -32,7 +32,9 @@ final class ShipmentsTest extends TestCase
         self::assertSame('13', $shipment[(string) self::id('fields', 'shipment_carrier')]);
         self::assertSame(['neu' => [(string) self::id('fields', 'money_amount') => '4.19', (string) self::id('fields', 'money_unit') => (string) self::id('values', 'currency_default')]], $shipment[(string) self::id('fields', 'shipment_price')]);
         self::assertSame('800', $shipment[(string) self::id('fields', 'shipment_weight')]['neu'][(string) self::id('fields', 'money_amount')]);
-        self::assertSame((string) self::id('values', 'prefix_centi'), $shipment[(string) self::id('fields', 'shipment_length')]['neu'][(string) self::id('fields', 'unit_prefix')]);
+        $dimension = $shipment[(string) self::id('fields', 'shipment_dimension')]['neu'];
+        self::assertSame((string) self::id('values', 'prefix_centi'), $dimension[(string) self::id('fields', 'dimension_length')]['neu'][(string) self::id('fields', 'unit_prefix')]);
+        self::assertSame('8', $dimension[(string) self::id('fields', 'dimension_height')]['neu'][(string) self::id('fields', 'money_amount')]);
         self::assertArrayNotHasKey((string) self::id('fields', 'unit_prefix'), $shipment[(string) self::id('fields', 'shipment_weight')]['neu']);
         self::assertSame((string) self::id('values', 'shipment_awaiting_payment'), $shipment[(string) self::id('fields', 'shipment_state')]);
         self::assertArrayNotHasKey((string) self::id('fields', 'shipment_number'), $shipment);
@@ -51,7 +53,7 @@ final class ShipmentsTest extends TestCase
     {
         $values = (new ShipmentChanges(self::roles()))->bought(self::purchase(), null, 55, 77, 0)[1]['values'];
 
-        foreach (['shipment_weight', 'shipment_length', 'shipment_width', 'shipment_height'] as $role) {
+        foreach (['shipment_weight', 'shipment_dimension'] as $role) {
             self::assertArrayNotHasKey((string) self::id('fields', $role), $values);
         }
 

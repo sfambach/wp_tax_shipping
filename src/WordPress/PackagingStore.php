@@ -5,6 +5,7 @@ namespace TaxmodShipping\WordPress;
 use Taxmod\WordPress\ModelDoor;
 use TaxmodShipping\Core\Packaging;
 use TaxmodShipping\Core\Packagings;
+use TaxmodShipping\Core\ShipmentRoles;
 
 /**
  * The shipping templates (D-1505): the materials under the group «Versandverpackungen», named by a role. Read in five
@@ -38,17 +39,33 @@ final class PackagingStore
         $r = ShipmentStore::roles();
         $records = array_keys($this->records());
         $values = $records === [] ? [] : $this->door()->valuesOf($records);
-        $partIds = [];
-        foreach ($values as $fields) {
-            foreach (['packaging_length', 'packaging_width', 'packaging_height', 'packaging_empty_weight', 'packaging_max_weight'] as $role) {
-                $partIds[] = (int) (($fields[$r->optional($role)] ?? [])[0] ?? 0);
-            }
-        }
-        $partIds = array_values(array_unique(array_filter($partIds)));
+        // D-1532: the edges sit one level deeper, in the «Abmessung» part — one more read, never one per record (CD-7).
+        $parts = ($ids = self::pointedAt($r, $values, ['packaging_dimension', 'packaging_empty_weight', 'packaging_max_weight'])) === [] ? [] : $this->door()->valuesOf($ids);
+        $edges = self::pointedAt($r, $parts, ['dimension_length', 'dimension_width', 'dimension_height']);
+        $parts += $edges === [] ? [] : $this->door()->valuesOf($edges);
         $name = $r->optional('material_name');
         $words = $name === 0 ? [] : ($this->door()->fieldWords(array_keys($values), [$name])[$name] ?? []);
 
-        return $this->all = Packagings::of($r, $values, $partIds === [] ? [] : $this->door()->valuesOf($partIds), $words);
+        return $this->all = Packagings::of($r, $values, $parts, $words);
+    }
+
+    /**
+     * The parts the given rows point at through these roles.
+     *
+     * @param array<int, array<int, list<string>>> $rows
+     * @param list<string>                         $roles
+     * @return list<int>
+     */
+    private static function pointedAt(ShipmentRoles $r, array $rows, array $roles): array
+    {
+        $ids = [];
+        foreach ($rows as $fields) {
+            foreach ($roles as $role) {
+                $ids[] = (int) (($fields[$r->optional($role)] ?? [])[0] ?? 0);
+            }
+        }
+
+        return array_values(array_unique(array_filter($ids)));
     }
 
     public function find(int $id): ?Packaging

@@ -12,8 +12,8 @@ final class ShipmentRoles
     public const NODES = ['shipment', 'shipment_states', 'contact', 'contact_person'];
 
     public const FIELDS = [
-        'shipment_receiver', 'shipment_sender', 'shipment_carrier', 'shipment_product', 'shipment_price', 'shipment_weight', 'shipment_length',
-        'shipment_width', 'shipment_height', 'shipment_state', 'shipment_number', 'shipment_reference', 'shipment_pay_url', 'shipment_bought_at', 'shipment_sale',
+        'shipment_receiver', 'shipment_sender', 'shipment_carrier', 'shipment_product', 'shipment_price', 'shipment_weight', 'shipment_dimension',
+        'dimension_length', 'dimension_width', 'dimension_height', 'shipment_state', 'shipment_number', 'shipment_reference', 'shipment_pay_url', 'shipment_bought_at', 'shipment_sale',
         'money_amount', 'money_unit', 'unit_prefix',
         'firm_name', 'contact_first_name', 'contact_address', 'address_street', 'street_name', 'house_number', 'address_zip_city', 'postal_code', 'city_name',
         'address_country', 'contact_email',
@@ -23,8 +23,8 @@ final class ShipmentRoles
 
     /** D-1505 templates and D-1506 letters are extras; without these roles the page simply offers none. */
     public const OPTIONAL = [
-        'nodes'  => ['packaging', 'letter_product'],
-        'fields' => ['packaging_length', 'packaging_width', 'packaging_height', 'packaging_empty_weight', 'packaging_max_weight', 'material_name',
+        'nodes'  => ['packaging', 'letter_product', 'countries'],
+        'fields' => ['packaging_dimension', 'packaging_empty_weight', 'packaging_max_weight', 'material_name',
             'letter_name', 'letter_code', 'letter_price', 'letter_max_length', 'letter_max_width', 'letter_max_height', 'letter_max_weight', 'letter_shop_url'],
         'values' => ['prefix_kilo', 'prefix_deci', 'prefix_milli'],
     ];

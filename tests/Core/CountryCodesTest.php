@@ -26,6 +26,17 @@ final class CountryCodesTest extends TestCase
         self::assertSame(0, $codes->nodeOf('NL'));
     }
 
+    public function testUnderContinentsACountryStaysValidAndAContinentIsNoDestination(): void
+    {
+        $parents = [100 => 1, 20 => 100, 21 => 100, 7 => 20, 8 => 20, 9 => 21];
+        $codes   = CountryCodes::of([7 => 'DE', 8 => 'AT', 9 => 'JP']);
+
+        self::assertSame('DE', $codes->codeOf(7), 'A country moved under its continent keeps its node and code.');
+        self::assertSame(9, $codes->nodeOf('JP'));
+        self::assertSame([100, 20, 21], CountryCodes::groups(100, $parents), 'The list and the continents are not pickable; its own parent is outside.');
+        self::assertNotContains(7, CountryCodes::groups(100, $parents));
+    }
+
     public function testPageChoosesWithTheModellersChooser(): void
     {
         $root  = dirname(__DIR__, 2);
@@ -33,6 +44,8 @@ final class CountryCodesTest extends TestCase
 
         self::assertStringContainsString('Modeller::NODE_CHOOSER_FILTER', $class);
         self::assertStringContainsString('symbolsOf(', $class);
+        self::assertStringContainsString('->tree($root, self::DEPTH)', $class, 'Countries are read below the continents too (D-1537).');
+        self::assertStringContainsString('CountryCodes::groups(', $class);
         self::assertStringContainsString("version_compare(Modeller::VERSION, self::MIN_MODELLER, '<')", $class, 'An older modeller keeps the code field.');
         self::assertStringContainsString("'countries'", (string) file_get_contents($root . '/src/Core/ShipmentRoles.php'));
     }

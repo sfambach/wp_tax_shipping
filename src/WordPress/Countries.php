@@ -20,7 +20,13 @@ final class Countries
 
     public const FIELD = 'country_node';
 
+    /** How deep the list goes: «Länder» › continent › country (Stefan 20.11. «nach kontinenten ordnen»). */
+    private const DEPTH = 2;
+
     private ?CountryCodes $codes = null;
+
+    /** @var array<int, array{name: string, parent: int, class: string, hidden: bool}>|null */
+    private ?array $tree = null;
 
     public function root(): int
     {
@@ -34,9 +40,8 @@ final class Countries
     public function codes(): CountryCodes
     {
         if ($this->codes === null) {
-            $root = $this->root();
-            $door = new ModelDoor();
-            $this->codes = CountryCodes::of($root === 0 ? [] : $door->symbolsOf(array_keys($door->children($root))));
+            $nodes = array_diff(array_keys($this->tree()), [$this->root()]);
+            $this->codes = CountryCodes::of($nodes === [] ? [] : (new ModelDoor())->symbolsOf(array_values($nodes)));
         }
 
         return $this->codes;
@@ -48,6 +53,20 @@ final class Countries
         $root = $this->root();
         $now  = $this->codes()->nodeOf($code);
 
-        return (string) apply_filters(Modeller::NODE_CHOOSER_FILTER, '', ['name' => self::FIELD, 'root' => $root, 'unpickable' => [$root]] + ($now > 0 ? ['preselected' => $now] : []));
+        return (string) apply_filters(Modeller::NODE_CHOOSER_FILTER, '', ['name' => self::FIELD, 'root' => $root, 'unpickable' => $this->groups()] + ($now > 0 ? ['preselected' => $now] : []));
+    }
+
+    /** @return list<int> the list itself and every node holding others — a continent is a heading, never a destination */
+    private function groups(): array
+    {
+        return CountryCodes::groups($this->root(), array_map(static fn (array $node): int => $node['parent'], $this->tree()));
+    }
+
+    /** @return array<int, array{name: string, parent: int, class: string, hidden: bool}> */
+    private function tree(): array
+    {
+        $root = $this->root();
+
+        return $this->tree ??= $root === 0 ? [] : (new ModelDoor())->tree($root, self::DEPTH);
     }
 }

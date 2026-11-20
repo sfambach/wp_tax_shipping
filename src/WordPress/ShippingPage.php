@@ -64,6 +64,8 @@ final class ShippingPage
 
     private ?WorkplacePrinters $printers = null;
 
+    private ?Countries $countries = null;
+
     /** D-1515: the labels on the page's front; the rest are behind «Alle Etiketten». */
     private const SHORT_LIST = 5;
 
@@ -189,6 +191,11 @@ final class ShippingPage
         }
 
         $country = isset($source['country']) ? strtoupper(sanitize_key(wp_unslash((string) $source['country']))) : 'DE';
+        // D-1532: a country chosen from the list «Länder» goes to the carriers as its ISO code.
+        if (isset($source[Countries::FIELD])) {
+            $chosen = $this->countries()->codes()->codeOf(absint($source[Countries::FIELD]));
+            $country = $chosen !== '' ? $chosen : $country;
+        }
 
         try {
             return new Parcel((int) $values['weight_g'], (int) $values['length_cm'], (int) $values['width_cm'], (int) $values['height_cm'], $country === '' ? 'DE' : $country);
@@ -233,6 +240,13 @@ final class ShippingPage
             'hint' => __('Versandverpackung aus dem Lager: füllt Maße und Gewicht (Höchstgewicht). Alles bleibt änderbar.', 'taxmod-shipping'),
         ]];
         $country = $value('country') === '' ? 'DE' : $value('country');
+        if (isset($source[Countries::FIELD])) {
+            $chosen = $this->countries()->codes()->codeOf(absint($source[Countries::FIELD]));
+            $country = $chosen !== '' ? $chosen : $country;
+        }
+        $countryRow = $this->countries()->root() > 0
+            ? ['label' => __('Zielland', 'taxmod-shipping'), 'control' => $this->countries()->chooser($country)]
+            : ['label' => __('Zielland', 'taxmod-shipping'), 'control' => ListPage::field(InputKind::Line, 'country', $country, ['id' => 'taxship-country', 'size' => '5']), 'for' => 'taxship-country', 'hint' => __('ISO-Kürzel, z. B. DE, AT, NL.', 'taxmod-shipping')];
 
         // Stefan 20.11. 18:27 «den Button einfach zum Tarif vergleichen, also rechts daneben … wieder die Toolbar-Idee»: one toolbar
         // line. The stamp's own form stands outside this one; its dialog sends only to it.
@@ -246,10 +260,15 @@ final class ShippingPage
                 ['label' => __('Länge', 'taxmod-shipping'), 'control' => $number('length_cm', 'cm'), 'for' => 'taxship-length_cm'],
                 ['label' => __('Breite', 'taxmod-shipping'), 'control' => $number('width_cm', 'cm'), 'for' => 'taxship-width_cm'],
                 ['label' => __('Höhe', 'taxmod-shipping'), 'control' => $number('height_cm', 'cm'), 'for' => 'taxship-height_cm'],
-                ['label' => __('Zielland', 'taxmod-shipping'), 'control' => ListPage::field(InputKind::Line, 'country', $country, ['id' => 'taxship-country', 'size' => '5']), 'for' => 'taxship-country', 'hint' => __('ISO-Kürzel, z. B. DE, AT, NL.', 'taxmod-shipping')],
+                $countryRow,
             ], '<button type="submit" class="button button-primary">' . ListPage::icon('search', __('Tarife vergleichen', 'taxmod-shipping')) . ' ' . esc_html__('Tarife vergleichen', 'taxmod-shipping') . '</button>'
                 . ($stamp ? ' ' . $this->stampDialog() : ''))
             . '</form>';
+    }
+
+    private function countries(): Countries
+    {
+        return $this->countries ??= new Countries();
     }
 
     private function compare(Parcel $parcel): RateComparison

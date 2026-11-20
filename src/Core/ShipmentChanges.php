@@ -49,9 +49,12 @@ final class ShipmentChanges
             (string) $r->field('shipment_price')     => ['neu' => $this->amount(Money::decimal($purchase->rate->priceCents), 'currency_default')],
             // A stamp bought in the Post shop comes without a measured parcel (D-1507): its sizes stay empty, never guessed.
             (string) $r->field('shipment_weight')    => $parcel === null ? '' : ['neu' => $this->amount((string) $parcel->weightGrams, 'unit_gram')],
-            (string) $r->field('shipment_length')    => $parcel === null ? '' : ['neu' => $this->amount((string) $parcel->lengthCm, 'unit_metre', 'prefix_centi')],
-            (string) $r->field('shipment_width')     => $parcel === null ? '' : ['neu' => $this->amount((string) $parcel->widthCm, 'unit_metre', 'prefix_centi')],
-            (string) $r->field('shipment_height')    => $parcel === null ? '' : ['neu' => $this->amount((string) $parcel->heightCm, 'unit_metre', 'prefix_centi')],
+            // D-1532: the three edges are one «Abmessung», the combined field the rest of the model uses for sizes.
+            (string) $r->field('shipment_dimension') => $parcel === null ? '' : ['neu' => [
+                (string) $r->field('dimension_length') => ['neu' => $this->amount((string) $parcel->lengthCm, 'unit_metre', 'prefix_centi')],
+                (string) $r->field('dimension_width')  => ['neu' => $this->amount((string) $parcel->widthCm, 'unit_metre', 'prefix_centi')],
+                (string) $r->field('dimension_height') => ['neu' => $this->amount((string) $parcel->heightCm, 'unit_metre', 'prefix_centi')],
+            ]],
             (string) $r->field('shipment_state')     => (string) $r->value($purchase->isPaid() ? 'shipment_paid' : 'shipment_awaiting_payment'),
             (string) $r->field('shipment_number')    => self::numbers($purchase),
             (string) $r->field('shipment_reference') => $purchase->reference,

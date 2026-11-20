@@ -3,8 +3,8 @@
 namespace TaxmodShipping\Core;
 
 /**
- * The materials of «Versandverpackungen» read as templates (D-1505). Edges and weights are unit values (D-1497): an
- * amount with an optional prefix; the field says the unit (centimetre, gram), the prefix scales it.
+ * The materials of «Versandverpackungen» read as templates (D-1505). Weights are unit values (D-1497), the edges unit values
+ * inside one «Abmessung» (D-1532): an amount with an optional prefix; the field says the unit (centimetre, gram), the prefix scales it.
  *
  * @see docs/konzept.md
  */
@@ -12,7 +12,7 @@ final class Packagings
 {
     /**
      * @param array<int, array<int, list<string>>> $records material id → relation id → values
-     * @param array<int, array<int, list<string>>> $parts   the unit values those records point at
+     * @param array<int, array<int, list<string>>> $parts   the parts those records point at: each «Abmessung» and the unit values in it
      * @param array<int, string>                   $names   material id → its word
      * @return array<int, Packaging> material id → template, by name
      */
@@ -22,12 +22,14 @@ final class Packagings
 
         foreach ($records as $id => $values) {
             $part = static fn (string $role): array => $parts[(int) (($values[$r->optional($role)] ?? [])[0] ?? 0)] ?? [];
+            $dimension = $part('packaging_dimension');
+            $edge = static fn (string $role): array => $parts[(int) (($dimension[$r->optional($role)] ?? [])[0] ?? 0)] ?? [];
             $out[(int) $id] = new Packaging(
                 (int) $id,
                 $names[(int) $id] ?? ('#' . $id),
-                self::scaled($r, $part('packaging_length'), -2),
-                self::scaled($r, $part('packaging_width'), -2),
-                self::scaled($r, $part('packaging_height'), -2),
+                self::scaled($r, $edge('dimension_length'), -2),
+                self::scaled($r, $edge('dimension_width'), -2),
+                self::scaled($r, $edge('dimension_height'), -2),
                 self::scaled($r, $part('packaging_empty_weight'), 0),
                 self::scaled($r, $part('packaging_max_weight'), 0),
             );

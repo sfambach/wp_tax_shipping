@@ -11,7 +11,7 @@ use TaxmodShipping\Core\ShipmentRoles;
 
 final class TemplatesAndLettersTest extends TestCase
 {
-    private const IDS = ['fields' => ['money_amount' => 1, 'unit_prefix' => 2, 'packaging_length' => 10, 'packaging_width' => 11, 'packaging_height' => 12, 'packaging_empty_weight' => 13,
+    private const IDS = ['fields' => ['money_amount' => 1, 'unit_prefix' => 2, 'packaging_dimension' => 10, 'dimension_length' => 30, 'dimension_width' => 31, 'dimension_height' => 32, 'packaging_empty_weight' => 13,
         'packaging_max_weight' => 14, 'letter_name' => 20, 'letter_code' => 21, 'letter_price' => 22, 'letter_max_length' => 23, 'letter_max_width' => 24, 'letter_max_height' => 25,
         'letter_max_weight' => 26, 'letter_shop_url' => 27], 'values' => ['prefix_centi' => 90, 'prefix_kilo' => 91, 'prefix_milli' => 92]];
 
@@ -27,8 +27,8 @@ final class TemplatesAndLettersTest extends TestCase
 
     public function testTemplateFillsEdgesAndMaximumLessAGram(): void
     {
-        $all = Packagings::of(self::roles(), [7 => [10 => ['100'], 11 => ['101'], 12 => ['102'], 14 => ['104']]],
-            [100 => [1 => ['18'], 2 => ['90']], 101 => [1 => ['12'], 2 => ['90']], 102 => [1 => ['2'], 2 => ['90']], 104 => [1 => ['500']]], [7 => 'A6 Luftpolster']);
+        $all = Packagings::of(self::roles(), [7 => [10 => ['99'], 14 => ['104']]],
+            [99 => [30 => ['100'], 31 => ['101'], 32 => ['102']], 100 => [1 => ['18'], 2 => ['90']], 101 => [1 => ['12'], 2 => ['90']], 102 => [1 => ['2'], 2 => ['90']], 104 => [1 => ['500']]], [7 => 'A6 Luftpolster']);
 
         self::assertSame(['weight_g' => '500', 'length_cm' => '18', 'width_cm' => '12', 'height_cm' => '2'], $all[7]->formValues());
     }

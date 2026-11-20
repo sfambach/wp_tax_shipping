@@ -1,6 +1,6 @@
 /**
  * D-1507: «Gekaufte Marke hochladen». Reads the Internetmarke PDF from the Post shop in the browser (pdf.js of the Etiketten module's
- * taxmod-label62), fills the dialog with what its text says — price, shipment number, receiver — and on «Eintragen und drucken» prints
+ * taxmod-label62), fills the dialog with what its text says — product, price, shipment number, and the receiver's address as a hint — and on «Eintragen und drucken» prints
  * it on 62 mm before the form records it. Nothing that is not found is guessed; the PDF never leaves the browser.
  */
 (function () {
@@ -101,7 +101,9 @@
 			return parseInt(option.getAttribute('data-cents'), 10) === cents;
 		});
 
-		return match ? match.value : (found.registered ? 'Einschreiben' : '');
+		var registered = document.querySelector('[data-taxship-stamp-state]').getAttribute('data-registered');
+
+		return match ? match.value : (found.registered ? registered : '');
 	}
 
 	document.addEventListener('click', function (event) {
@@ -128,12 +130,10 @@
 				put('product', product(found));
 				put('price', found.price);
 				put('number', found.number);
-				put('receiver[name]', found.name);
-				put('receiver[addition]', found.addition);
-				put('receiver[street]', found.street);
-				put('receiver[number]', found.house);
-				put('receiver[postal_code]', found.postal_code);
-				put('receiver[city]', found.city);
+				// D-1510: the receiver is chosen as a contact; the address on the stamp is shown to find or make it.
+				var address = document.querySelector('[data-taxship-stamp-address]');
+				var shown = [found.name, found.addition, [found.street, found.house].filter(Boolean).join(' '), [found.postal_code, found.city].filter(Boolean).join(' ')].filter(Boolean);
+				address.textContent = shown.length ? address.getAttribute('data-label') + ' ' + shown.join(', ') : '';
 				state.textContent = state.getAttribute('data-read') + ' ' + chosen.name;
 			} catch (failure) {
 				state.textContent = taxmodLabel62.failed + ' ' + failure.message;
@@ -147,6 +147,14 @@
 		var form = event.target;
 
 		if (!form.matches('[data-taxship-stamp-form]') || !chosen || form.dataset.printed) {
+			return;
+		}
+
+		// Nothing is printed for an entry the server will refuse: it then says what is missing.
+		var contact = document.querySelector('[form="taxship-stamp-form"][name="receiver_contact"]:checked');
+		var price = field('price');
+
+		if (!contact || !parseInt(contact.value, 10) || !field('product').value.trim() || !price || !price.value.trim()) {
 			return;
 		}
 

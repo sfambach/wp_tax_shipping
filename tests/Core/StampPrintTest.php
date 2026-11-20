@@ -58,5 +58,13 @@ final class StampPrintTest extends TestCase
         self::assertStringContainsString('->add($purchase, null,', $page, 'D-1507: no parcel is guessed for an uploaded stamp.');
         self::assertDoesNotMatchRegularExpression('/\bfetch\s*\(|XMLHttpRequest|FormData/', $script, 'The PDF never leaves the browser.');
         self::assertStringContainsString('taxmodLabel62.run(chosen', $script);
+
+        // D-1510: the receiver is a contact from the chooser; the stamp's address is only a hint, never typed fields.
+        $dialog = substr($page, (int) strpos($page, 'private function stampDialog'), (int) strpos($page, 'public function stamp()') - (int) strpos($page, 'private function stampDialog'));
+        self::assertStringNotContainsString("'receiver[", $dialog);
+        self::assertStringContainsString("RecordPick::field('receiver_contact'", $dialog);
+        self::assertStringContainsString('InputKind::Decimal', $dialog);
+        self::assertStringContainsString('->add($purchase, null, $contact,', $page);
+        self::assertStringNotContainsString("put('receiver", $script);
     }
 }

@@ -3,6 +3,7 @@
 namespace TaxmodShipping\WordPress;
 
 use Taxmod\Core\Description\InputKind;
+use Taxmod\Core\Renderer\DecimalText;
 use Taxmod\WordPress\Admin\ListPage;
 use Taxmod\WordPress\Admin\RecordPick;
 use Taxmod\WordPress\ModelDoor;
@@ -310,21 +311,20 @@ final class ShippingPage
 
         $body = '<p>' . esc_html__('Wähle das PDF der Marke aus dem Shop der Post. Es wird nur hier im Browser gelesen, nicht hochgeladen. Was sich lesen lässt, steht danach in den Feldern; prüfe es.', 'taxmod-shipping') . '</p>'
             . '<p><button type="button" class="button" data-taxship-stamp-pick>' . ListPage::icon('pdf', __('PDF wählen', 'taxmod-shipping')) . ' ' . esc_html__('PDF wählen', 'taxmod-shipping') . '</button> '
-            . '<span data-taxship-stamp-state data-none="' . esc_attr__('Noch kein PDF gewählt.', 'taxmod-shipping') . '" data-read="' . esc_attr__('Gelesen:', 'taxmod-shipping') . '">' . esc_html__('Noch kein PDF gewählt.', 'taxmod-shipping') . '</span></p>'
+            . '<span data-taxship-stamp-state data-registered="' . esc_attr__('Einschreiben', 'taxmod-shipping') . '" data-none="' . esc_attr__('Noch kein PDF gewählt.', 'taxmod-shipping') . '" data-read="' . esc_attr__('Gelesen:', 'taxmod-shipping') . '">' . esc_html__('Noch kein PDF gewählt.', 'taxmod-shipping') . '</span></p>'
             . '<datalist id="taxship-stamp-letters">' . $letters . '</datalist>'
             . $line('product', __('Produkt', 'taxmod-shipping'), ['list' => 'taxship-stamp-letters'])
-            . $line('price', __('Preis (€)', 'taxmod-shipping'), ['size' => '8'])
+            . '<label style="display:block;margin:.3em 0"><span style="display:inline-block;width:9em">' . esc_html__('Preis', 'taxmod-shipping') . '</span>'
+            . ListPage::field(InputKind::Decimal, 'price', '', ['form' => $formId, 'size' => '8', 'id' => 'taxship-stamp-price']) . ' €</label>'
             . $line('number', __('Sendungsnummer', 'taxmod-shipping'))
+            // D-1497/D-1510: the receiver is a contact; a new one is made in the chooser («… anlegen»). The PDF's address is only a hint.
             . '<div style="margin:.3em 0"><span style="display:inline-block;width:9em">' . esc_html__('Empfänger', 'taxmod-shipping') . '</span>'
             . RecordPick::field('receiver_contact', (new Contacts())->pickTree(), null, $formId) . '</div>'
-            . '<p class="description">' . esc_html__('Oder neu, aus dem PDF gelesen:', 'taxmod-shipping') . '</p>'
-            . $line('receiver[name]', __('Name', 'taxmod-shipping')) . $line('receiver[addition]', __('Zusatz', 'taxmod-shipping'))
-            . $line('receiver[street]', __('Straße', 'taxmod-shipping')) . $line('receiver[number]', __('Hausnummer', 'taxmod-shipping'))
-            . $line('receiver[postal_code]', __('PLZ', 'taxmod-shipping')) . $line('receiver[city]', __('Ort', 'taxmod-shipping'));
+            . '<p class="description" data-taxship-stamp-address data-label="' . esc_attr__('Anschrift auf der Marke:', 'taxmod-shipping') . '"></p>';
 
         return '<form id="' . esc_attr($formId) . '" method="post" action="' . esc_url(admin_url('admin-post.php')) . '" data-taxship-stamp-form>'
             . wp_nonce_field(self::STAMP, '_wpnonce', true, false)
-            . '<input type="hidden" name="action" value="' . esc_attr(self::STAMP) . '"><input type="hidden" name="receiver[country]" value="DE"></form>'
+            . '<input type="hidden" name="action" value="' . esc_attr(self::STAMP) . '"></form>'
             . '<div style="display:flex;gap:.5em;align-items:center;margin:.5em 0">' . ListPage::dialogAction('taxship-stamp', __('Gekaufte Marke hochladen', 'taxmod-shipping'), __('Gekaufte Marke hochladen', 'taxmod-shipping'), $body, 'action', self::STAMP, __('Eintragen und drucken', 'taxmod-shipping'), $formId, 'upload')
             . '<span class="description">' . esc_html__('Marke im Shop der Post gekauft? Hier hochladen, eintragen und auf 62 mm drucken.', 'taxmod-shipping') . '</span></div>';
     }
@@ -336,12 +336,8 @@ final class ShippingPage
         ListPage::nonce(self::STAMP);
         $text = static fn (string $name): string => sanitize_text_field(wp_unslash((string) ($_POST[$name] ?? '')));
         $product = $text('product');
-
-        try {
-            $cents = Money::cents($text('price'));
-        } catch (ShippingError) {
-            $cents = 0;
-        }
+        $price = DecimalText::typed($text('price'));
+        $cents = $price === null ? 0 : Money::cents($price);
 
         if ($product === '' || $cents <= 0) {
             throw new ShippingError(__('Produkt und Preis der Marke fehlen.', 'taxmod-shipping'));
@@ -349,11 +345,10 @@ final class ShippingPage
 
         $settings = new Settings();
         $contact = absint($_POST['receiver_contact'] ?? 0);
-        $typed = Address::fromArray(array_map(static fn (mixed $v): string => is_scalar($v) ? sanitize_text_field(wp_unslash((string) $v)) : '', is_array($_POST['receiver'] ?? null) ? $_POST['receiver'] : []));
-        $receiver = $contact > 0 ? (new Contacts())->address($contact) : $typed;
+        $name = (new Contacts())->names()[$contact] ?? '';
 
-        if (! $receiver->isComplete()) {
-            throw new ShippingError(__('Empfänger unvollständig: Name, Straße, PLZ und Ort sind nötig.', 'taxmod-shipping'));
+        if ($name === '') {
+            throw new ShippingError(__('Bitte den Empfänger als Kontakt wählen oder im Wähler anlegen.', 'taxmod-shipping'));
         }
 
         $firm = $settings->carrierFirms()[LetterRates::CARRIER] ?? 0;
@@ -370,8 +365,8 @@ final class ShippingPage
 
         $number = (string) preg_replace('/\s+/', '', $text('number'));
         $rate = new Rate(LetterRates::CARRIER, 'stamp', $product, $cents, $number !== '', 0);
-        $purchase = Purchase::bought('', $rate, $receiver->name, ['carrier' => LetterRates::CARRIER, 'reference' => 'shop-' . current_time('YmdHis'), 'state' => 'paid', 'numbers' => $number === '' ? [] : [$number]], current_time('mysql'));
-        (new ShipmentStore())->add($purchase, null, $contact > 0 ? $contact : $typed, $settings->senderContact(), $firm);
+        $purchase = Purchase::bought('', $rate, $name, ['carrier' => LetterRates::CARRIER, 'reference' => 'shop-' . current_time('YmdHis'), 'state' => 'paid', 'numbers' => $number === '' ? [] : [$number]], current_time('mysql'));
+        (new ShipmentStore())->add($purchase, null, $contact, $settings->senderContact(), $firm);
 
         return self::url();
     }

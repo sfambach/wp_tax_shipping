@@ -133,11 +133,13 @@ final class Contacts
         $fields = $this->fields();
         $contacts = [];
 
-        foreach ($nodeOf === [] ? [] : $door->valuesOf(array_keys($nodeOf)) as $id => $values) {
+        $valuesOf = $nodeOf === [] ? [] : $door->valuesOf(array_keys($nodeOf));
+
+        foreach ($nodeOf as $id => $node) {
+            $values = $valuesOf[$id] ?? [];
             $name = trim(($values[$fields['contact_first_name'] ?? 0][0] ?? '') . ' ' . ($values[$fields['firm_name'] ?? 0][0] ?? ''));
-            if ($name !== '') {
-                $contacts[(int) $id] = ['name' => $name, 'node' => (int) $nodeOf[$id]];
-            }
+            // A contact made in the chooser may have no name yet (D-1509); it still stands, shown by its number.
+            $contacts[(int) $id] = ['name' => $name !== '' ? $name : '#' . $id, 'node' => (int) $node];
         }
 
         uasort($contacts, static fn (array $a, array $b): int => strnatcasecmp($a['name'], $b['name']));

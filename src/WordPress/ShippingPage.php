@@ -32,6 +32,16 @@ final class ShippingPage
     public const REMOVE   = 'taxship_remove';
     public const STAMP    = 'taxship_stamp';
     public const MAIL_PDF = 'taxship_mail_pdf';
+    public const KEPT_PDF = 'taxship_kept_pdf';
+
+    /** D-1513: the Etiketten module's store of postage PDFs; a shipment's stamp is kept under «taxship-<id>». */
+    public const POSTAGE_PUT = 'taxmod_postage_put';
+
+    public const POSTAGE_GET = 'taxmod_postage_get';
+
+    public const POSTAGE_KEYS = 'taxmod_postage_keys';
+
+    public const POSTAGE_PRINTED = 'taxmod_postage_printed';
 
     /** D-1511: the mail module's labels and the PDF behind one of their links. */
     public const MAIL_LABELS = 'taxmail_shipping_labels';
@@ -41,7 +51,7 @@ final class ShippingPage
     public const MAIL_LABEL_PRINTED = 'taxmail_shipping_label_printed';
 
     /** admin-post action → method */
-    public const ACTS = [self::BUY => 'buy', self::STATUS => 'status', self::PRINT => 'printLabel', self::DOWNLOAD => 'download', self::REMOVE => 'remove', self::STAMP => 'stamp', self::MAIL_PDF => 'mailPdf'];
+    public const ACTS = [self::BUY => 'buy', self::STATUS => 'status', self::PRINT => 'printLabel', self::DOWNLOAD => 'download', self::REMOVE => 'remove', self::STAMP => 'stamp', self::MAIL_PDF => 'mailPdf', self::KEPT_PDF => 'keptPdf'];
 
     /** D-1507: the Etiketten module's 62 mm postage print, attached by its handle only. */
     public const LABEL62 = 'taxmod-label62';
@@ -64,6 +74,11 @@ final class ShippingPage
         $source = $this->withPackaging($_GET);
         $parcel = $this->parcelFromRequest($source);
         $sections = [['title' => __('Sendung', 'taxmod-shipping'), 'html' => $this->parcelForm($parcel, $source)]];
+
+        if (isset($_GET['taxship_unkept'])) {
+            $why = sanitize_text_field(rawurldecode(wp_unslash((string) $_GET['taxship_unkept'])));
+            array_unshift($sections, ['html' => '<div class="notice notice-warning inline"><p>' . esc_html(sprintf(/* translators: %s: reason */ __('Sendung eingetragen, die Marke aber nicht gespeichert: %s', 'taxmod-shipping'), $why)) . '</p></div>']);
+        }
 
         if ($parcel instanceof Parcel) {
             $sections[] = ['title' => __('Tarife', 'taxmod-shipping'), 'html' => $this->offers($parcel)];
@@ -335,6 +350,15 @@ final class ShippingPage
 
         $html .= $post(self::STATUS, 'update', __('Stand abfragen', 'taxmod-shipping')) . ' ';
 
+        // D-1513: a kept stamp prints from the store, without choosing the file again.
+        if (self::canPrintPostage() && in_array(self::postageKey((int) $purchase->id), $this->keptKeys(), true)) {
+            $url = wp_nonce_url(add_query_arg(['action' => self::KEPT_PDF, 'purchase' => $purchase->id], admin_url('admin-post.php')), self::KEPT_PDF . $purchase->id);
+            $html .= '<button type="button" class="button" data-taxship-kept-pdf="' . esc_url($url) . '" data-taxship-carrier="' . esc_attr($purchase->rate->carrier) . '" title="' . esc_attr__('Gespeicherte Marke drucken (62 mm)', 'taxmod-shipping') . '">'
+                . ListPage::icon(ListPage::ICON_PRINT, __('Gespeicherte Marke drucken (62 mm)', 'taxmod-shipping')) . '</button> ';
+
+            return $html . $post(self::REMOVE, ListPage::ICON_DELETE, __('Sendung löschen (rückgängig machbar)', 'taxmod-shipping'));
+        }
+
         // D-1507: a stamp bought in the Post shop is a PDF on the owner's disk; the browser crops it to 62 mm and prints it on his click.
         if ($purchase->rate->carrier === LetterRates::CARRIER) {
             if (self::canPrintPostage()) {
@@ -381,6 +405,7 @@ final class ShippingPage
             // D-1510: a receiver, if any, is a contact (D-1497); the stamp's address is shown, never stored (Stefan 20.11., privacy).
             . '<div style="margin:.3em 0"><span style="display:inline-block;width:9em">' . esc_html__('Empfänger (freiwillig)', 'taxmod-shipping') . '</span>'
             . RecordPick::field('receiver_contact', (new Contacts())->pickTree(), null, $formId) . '</div>'
+            . '<input type="hidden" name="stamp_pdf" value="" form="' . esc_attr($formId) . '">'
             . '<input type="hidden" name="mail_cart" value="" form="' . esc_attr($formId) . '"><input type="hidden" name="carrier" value="' . esc_attr(LetterRates::CARRIER) . '" form="' . esc_attr($formId) . '">'
             . '<p class="description" data-taxship-stamp-address data-label="' . esc_attr__('Anschrift auf der Marke (nur zur Ansicht, wird nicht gespeichert):', 'taxmod-shipping') . '"></p>';
 
@@ -434,14 +459,51 @@ final class ShippingPage
         $rate = new Rate($carrier, 'stamp', $product, $cents, $number !== '', 0);
         $reference = $cart === '' ? 'shop-' . current_time('YmdHis') : MailLabels::REFERENCE . $cart;
         $purchase = Purchase::bought('', $rate, $name, ['carrier' => $carrier, 'reference' => $reference, 'state' => 'paid', 'numbers' => $number === '' ? [] : [$number]], current_time('mysql'));
-        (new ShipmentStore())->add($purchase, null, $contact, $settings->senderContact(), $firm);
+        $id = (new ShipmentStore())->add($purchase, null, $contact, $settings->senderContact(), $firm);
+        $kept = $this->keep($id, (string) wp_unslash((string) ($_POST['stamp_pdf'] ?? '')));
 
         if ($cart !== '') {
             // Printed in the browser before this form was sent: the mail module now keeps the label two weeks, not thirty days.
             do_action(self::MAIL_LABEL_PRINTED, $cart);
         }
 
-        return self::url();
+        return $kept === true ? self::url() : self::url(['taxship_unkept' => rawurlencode($kept)]);
+    }
+
+    /**
+     * D-1513: the stamp's PDF, sent with the form as base64, sealed into the Etiketten module's store and marked printed (it was,
+     * in the browser, before the form left). Answers true, or why it was not kept; the shipment stands either way.
+     */
+    private function keep(int $id, string $base64): bool|string
+    {
+        if ($base64 === '' || $id <= 0) {
+            return true;
+        }
+
+        $pdf = base64_decode($base64, true);
+        $answer = $pdf === false ? __('kein PDF', 'taxmod-shipping') : apply_filters(self::POSTAGE_PUT, false, self::postageKey($id), $pdf);
+
+        if ($answer === true) {
+            do_action(self::POSTAGE_PRINTED, self::postageKey($id));
+
+            return true;
+        }
+
+        return is_string($answer) ? $answer : __('Das Etikettenmodul fehlt.', 'taxmod-shipping');
+    }
+
+    private static function postageKey(int $id): string
+    {
+        return 'taxship-' . $id;
+    }
+
+    /** @var list<string>|null */
+    private ?array $keptKeys = null;
+
+    /** @return list<string> */
+    private function keptKeys(): array
+    {
+        return $this->keptKeys ??= array_values(array_filter((array) apply_filters(self::POSTAGE_KEYS, []), 'is_string'));
     }
 
     /** admin-post «Kaufen»: capability → nonce → validate (the price shown is still the price) → act. */
@@ -565,6 +627,25 @@ final class ShippingPage
 
         if (! is_string($pdf) || ! str_starts_with($pdf, '%PDF')) {
             throw new ShippingError(__('Das PDF dieser Marke ist nicht mehr zu holen.', 'taxmod-shipping'));
+        }
+
+        nocache_headers();
+        header('Content-Type: application/pdf');
+        header('Content-Length: ' . strlen($pdf));
+        print $pdf; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- binary PDF
+        exit;
+    }
+
+    /** D-1513: a kept stamp from the Etiketten module's store to the browser, for printing again. */
+    public function keptPdf(): void
+    {
+        self::allowed();
+        $id = absint($_GET['purchase'] ?? 0);
+        ListPage::nonce(self::KEPT_PDF . $id);
+        $pdf = apply_filters(self::POSTAGE_GET, null, self::postageKey($id));
+
+        if (! is_string($pdf) || ! str_starts_with($pdf, '%PDF')) {
+            throw new ShippingError(__('Diese Marke ist nicht mehr gespeichert (14 Tage nach dem Druck gelöscht). Bitte das PDF neu wählen.', 'taxmod-shipping'));
         }
 
         nocache_headers();

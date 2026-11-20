@@ -338,7 +338,7 @@ final class ShippingPage
         // D-1507: a stamp bought in the Post shop is a PDF on the owner's disk; the browser crops it to 62 mm and prints it on his click.
         if ($purchase->rate->carrier === LetterRates::CARRIER) {
             if (self::canPrintPostage()) {
-                $html .= '<button type="button" class="button" data-taxmod-label62-pick="" title="' . esc_attr__('Marke aus dem Post-Shop drucken (PDF wählen, 62 mm)', 'taxmod-shipping') . '">'
+                $html .= '<button type="button" class="button" data-taxmod-label62-pick="" data-taxmod-label62-cut-marks title="' . esc_attr__('Marke aus dem Post-Shop drucken (PDF wählen, 62 mm)', 'taxmod-shipping') . '">'
                     . ListPage::icon(ListPage::ICON_PRINT, __('Marke aus dem Post-Shop drucken (PDF wählen, 62 mm)', 'taxmod-shipping')) . '</button> ';
             }
 

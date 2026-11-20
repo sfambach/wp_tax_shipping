@@ -158,7 +158,8 @@
 		}
 
 		event.preventDefault();
-		taxmodLabel62.run(chosen, '').then(function () {
+		// The Post shop's stamp has corner crosses to cut along; left out, the stamp prints large (Stefan 20.11. «Etwas klein»).
+		taxmodLabel62.run(chosen, '', { cutMarks: field('carrier').value === 'post' }).then(function () {
 			form.dataset.printed = '1';
 			form.submit();
 		});

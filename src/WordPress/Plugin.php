@@ -30,6 +30,7 @@ final class Plugin
     public const BUY    = 'taxmod_shipping_buy';
     public const STATUS = 'taxmod_shipping_status';
     public const LABEL  = 'taxmod_shipping_label';
+    public const CARRIERS = 'taxmod_shipping_carriers';
 
     public static function boot(): void
     {
@@ -76,6 +77,19 @@ final class Plugin
             'render' => static fn (): string => (new SettingsPage())->render()];
 
         return $pages;
+    }
+
+    /** @return array<string, string> carrier code → name, as the carrier modules announce themselves */
+    public static function carriers(): array
+    {
+        $carriers = [];
+        foreach ((array) apply_filters(self::CARRIERS, []) as $code => $label) {
+            if (is_string($code) && $code !== '' && is_string($label)) {
+                $carriers[sanitize_key($code)] = $label;
+            }
+        }
+
+        return $carriers;
     }
 
     public static function moduleUrl(string $slug, array $query = []): string

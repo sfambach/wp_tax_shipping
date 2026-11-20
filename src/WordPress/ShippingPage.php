@@ -136,8 +136,12 @@ final class ShippingPage
     private function buyDialog(string $switch, Rate $rate, Parcel $parcel): string
     {
         $formId = $switch . '-form';
-        $field = static fn (string $name, string $label, int $max, bool $required = true): string => '<label style="display:block;margin:.3em 0"><span style="display:inline-block;width:9em">' . esc_html($label) . '</span>'
-            . '<input type="text" name="receiver[' . esc_attr($name) . ']" maxlength="' . $max . '"' . ($required ? ' required' : '') . ' form="' . esc_attr($formId) . '" style="width:16em"></label>';
+        $field = static fn (string $name, string $label, int $max): string => '<label style="display:block;margin:.3em 0"><span style="display:inline-block;width:9em">' . esc_html($label) . '</span>'
+            . '<input type="text" name="receiver[' . esc_attr($name) . ']" maxlength="' . $max . '" form="' . esc_attr($formId) . '" style="width:16em"></label>';
+        $contacts = '<option value="0">' . esc_html__('— neuer Kontakt, unten eintragen —', 'taxmod-shipping') . '</option>';
+        foreach ($this->contactNames() as $id => $name) {
+            $contacts .= '<option value="' . esc_attr((string) $id) . '">' . esc_html($name) . '</option>';
+        }
         $hidden = '';
         foreach ($parcel->toArray() as $name => $value) {
             $hidden .= '<input type="hidden" name="' . esc_attr($name) . '" value="' . esc_attr((string) $value) . '">';
@@ -150,9 +154,12 @@ final class ShippingPage
             $rate->name,
             self::euro($rate->priceCents)
         )) . '</p>'
-            . $field('name', __('Empfänger', 'taxmod-shipping'), 35) . $field('addition', __('Zusatz', 'taxmod-shipping'), 35, false)
-            . $field('street', __('Straße', 'taxmod-shipping'), 35) . $field('number', __('Hausnummer', 'taxmod-shipping'), 10, false)
+            . '<label style="display:block;margin:.3em 0"><span style="display:inline-block;width:9em">' . esc_html__('Empfänger', 'taxmod-shipping') . '</span>'
+            . '<select name="receiver_contact" form="' . esc_attr($formId) . '" style="width:16em">' . $contacts . '</select></label>'
+            . $field('name', __('Name', 'taxmod-shipping'), 35)
+            . $field('street', __('Straße', 'taxmod-shipping'), 35) . $field('number', __('Hausnummer', 'taxmod-shipping'), 10)
             . $field('postal_code', __('PLZ', 'taxmod-shipping'), 17) . $field('city', __('Ort', 'taxmod-shipping'), 35)
+            . $field('email', __('E-Mail', 'taxmod-shipping'), 70)
             . '<input type="hidden" name="receiver[country]" value="' . esc_attr($parcel->country) . '" form="' . esc_attr($formId) . '">';
 
         return '<form id="' . esc_attr($formId) . '" method="post" action="' . esc_url(admin_url('admin-post.php')) . '">'
@@ -170,7 +177,13 @@ final class ShippingPage
     {
         $rows = [];
 
-        foreach ((new PurchaseStore())->all() as $purchase) {
+        try {
+            $all = (new ShipmentStore())->all();
+        } catch (ShippingError $failure) {
+            return '<div class="notice notice-warning inline"><p>' . esc_html($failure->getMessage()) . '</p></div>';
+        }
+
+        foreach ($all as $purchase) {
             $rows[] = [
                 esc_html($purchase->createdAt),
                 esc_html($purchase->receiver),
@@ -210,7 +223,7 @@ final class ShippingPage
                 . $post(self::PRINT, ListPage::ICON_PRINT, __('Etikett drucken', 'taxmod-shipping'), '<input type="hidden" name="number" value="' . esc_attr($number) . '">') . ' ';
         }
 
-        return $html . $post(self::REMOVE, ListPage::ICON_DELETE, __('Aus der Liste nehmen', 'taxmod-shipping'));
+        return $html . $post(self::REMOVE, ListPage::ICON_DELETE, __('Sendung löschen (rückgängig machbar)', 'taxmod-shipping'));
     }
 
     /** admin-post «Kaufen»: capability → nonce → validate (the price shown is still the price) → act. */
@@ -243,16 +256,31 @@ final class ShippingPage
             ));
         }
 
-        $receiver = Address::fromArray(array_map(static fn (mixed $v): string => is_scalar($v) ? sanitize_text_field(wp_unslash((string) $v)) : '', is_array($_POST['receiver'] ?? null) ? $_POST['receiver'] : []));
         $settings = new Settings();
+        $contact = absint($_POST['receiver_contact'] ?? 0);
+        $typed = Address::fromArray(array_map(static fn (mixed $v): string => is_scalar($v) ? sanitize_text_field(wp_unslash((string) $v)) : '', is_array($_POST['receiver'] ?? null) ? $_POST['receiver'] : []));
+        $receiver = $contact > 0 ? (new Contacts())->address($contact) : $typed;
 
         if (! $receiver->isComplete()) {
             throw new ShippingError(__('Empfänger unvollständig: Name, Straße, PLZ und Ort sind nötig.', 'taxmod-shipping'));
         }
 
-        $answer = apply_filters(Plugin::BUY, null, $rate->toArray(), ['sender' => $settings->sender()->toArray(), 'receiver' => $receiver->toArray(), 'email' => $settings->email()]);
-        $purchase = Purchase::bought(wp_generate_uuid4(), $rate, $receiver->name, is_array($answer) ? $answer : null, current_time('mysql'));
-        (new PurchaseStore())->put($purchase);
+        // Everything the record needs is checked before the carrier is asked, so no cart is made that cannot be kept.
+        $sender = $settings->sender();
+        $firm = $settings->carrierFirms()[$rate->carrier] ?? 0;
+        $missing = ShipmentStore::roles()->missing();
+
+        if ($firm === 0) {
+            throw new ShippingError(sprintf(/* translators: %s: carrier */ __('Unter Einstellungen › Versand fehlt die Firma für %s.', 'taxmod-shipping'), strtoupper($rate->carrier)));
+        }
+
+        if ($missing !== []) {
+            throw new ShippingError(__('Das Modell kennt «Sendungen» noch nicht (fehlende Rollen):', 'taxmod-shipping') . ' ' . implode(', ', $missing));
+        }
+
+        $answer = apply_filters(Plugin::BUY, null, $rate->toArray(), ['sender' => $sender->toArray(), 'receiver' => $receiver->toArray(), 'email' => $settings->email()]);
+        $purchase = Purchase::bought('', $rate, $receiver->name, is_array($answer) ? $answer : null, current_time('mysql'));
+        (new ShipmentStore())->add($purchase, $parcel, $contact > 0 ? $contact : $typed, $settings->senderContact(), $firm);
 
         return self::url();
     }
@@ -261,7 +289,11 @@ final class ShippingPage
     {
         $purchase = $this->purchaseFromPost(self::STATUS);
         $answer = apply_filters(Plugin::STATUS, null, ['carrier' => $purchase->rate->carrier, 'reference' => $purchase->reference]);
-        (new PurchaseStore())->put($purchase->withStatus(is_array($answer) ? $answer : null));
+        $updated = $purchase->withStatus(is_array($answer) ? $answer : null);
+
+        if ($updated != $purchase) {
+            (new ShipmentStore())->update((int) $purchase->id, $updated);
+        }
 
         return self::url();
     }
@@ -288,7 +320,7 @@ final class ShippingPage
         self::allowed();
         $id = sanitize_text_field(wp_unslash((string) ($_GET['purchase'] ?? '')));
         ListPage::nonce(self::DOWNLOAD . $id);
-        $purchase = (new PurchaseStore())->find($id) ?? throw new ShippingError(__('Diesen Kauf gibt es nicht.', 'taxmod-shipping'));
+        $purchase = (new ShipmentStore())->find((int) $id) ?? throw new ShippingError(__('Diesen Kauf gibt es nicht.', 'taxmod-shipping'));
         $number = $this->numberOf($purchase, $_GET);
         $pdf = $this->label($purchase, $number);
 
@@ -302,7 +334,7 @@ final class ShippingPage
 
     public function remove(): string
     {
-        (new PurchaseStore())->remove($this->purchaseFromPost(self::REMOVE)->id);
+        (new ShipmentStore())->remove((int) $this->purchaseFromPost(self::REMOVE)->id);
 
         return self::url();
     }
@@ -334,13 +366,21 @@ final class ShippingPage
         return $number;
     }
 
+    /** @return array<int, string> */
+    private function contactNames(): array
+    {
+        static $names = null;
+
+        return $names ??= (new Contacts())->names();
+    }
+
     private function purchaseFromPost(string $action): Purchase
     {
         self::allowed();
         $id = sanitize_text_field(wp_unslash((string) ($_POST['purchase'] ?? '')));
         ListPage::nonce($action . $id);
 
-        return (new PurchaseStore())->find($id) ?? throw new ShippingError(__('Diesen Kauf gibt es nicht.', 'taxmod-shipping'));
+        return (new ShipmentStore())->find((int) $id) ?? throw new ShippingError(__('Diesen Kauf gibt es nicht.', 'taxmod-shipping'));
     }
 
     private static function allowed(): void

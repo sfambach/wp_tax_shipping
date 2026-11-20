@@ -18,7 +18,7 @@ namespace TaxmodShipping\Core;
 final class ContactAddress
 {
     /** The roles this reader needs, each a field id on the site (D-1394). */
-    public const ROLES = ['firm_name', 'contact_first_name', 'contact_address', 'address_street', 'street_name', 'house_number', 'address_zip_city', 'postal_code', 'city_name', 'address_country'];
+    public const ROLES = ['firm_name', 'contact_first_name', 'contact_address', 'address_street', 'street_name', 'house_number', 'address_zip_city', 'postal_code', 'city_name', 'address_country', 'contact_email'];
 
     /** @param array<string, int> $fields role → field id */
     public function __construct(private readonly array $fields)
@@ -46,6 +46,7 @@ final class ContactAddress
             $this->text($parts[$zip] ?? [], 'postal_code'),
             $this->text($parts[$zip] ?? [], 'city_name'),
             CountryName::iso($this->text($address, 'address_country')),
+            $this->text($own, 'contact_email'),
         );
 
         if (! $result->isComplete()) {

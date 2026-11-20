@@ -1,6 +1,6 @@
 # Versand — Konzept
 
-Stand 0.0.1 (2026-11-20). Beschlüsse: **D-1496** (Modul, Filter, Kauf nur auf Klick), **D-1497** (Modellknoten «Sendungen», PROPOSED, Stefans Karte).
+Stand 0.0.1 (2026-11-20). Beschlüsse: **D-1496** (Modul, Filter, Kauf nur auf Klick), **D-1497** (Modellknoten «Sendungen» und «E-Mail» am Kontakt, ACCEPTED: Stefans Karte 20.11.2026 06:36 UTC).
 
 ## Ablauf
 
@@ -37,11 +37,12 @@ Ein Dienst antwortet nur, wenn `carrier` seiner ist, und gibt sonst die Antwort 
 
 ## Annahmen (nicht im Beschluss)
 
-- ⚠️ *INFERRED:* Bis «Sendungen» im Modell steht (D-1497), liegen die Käufe in der Option `taxmod_shipping_purchases` (die letzten 200). Danach wird jeder Kauf ein Satz und die Option einmal übernommen und gelöscht.
+- Jeder Kauf ist ein Satz in «Sendungen» (D-1497, AR-1), geschrieben über `write-data` als ein Akt, also rückgängig machbar (D-1410). Preis, Gewicht und Maße sind Einheitenwerte (Betrag, Einheit, Vorsatz). Mehrere Sendungsnummern gehen als `{values: [...]}`.
 - Absender ist ein Kontakt-Satz (D-1497). Seine Adresse wird über die vorhandenen Kompositionen gelesen: Kontakt › «Address» › «Street / H#», «Zip/City», «Country» (D-1250). Die Felder werden über Rollen benannt (D-1394), höchstens drei Lesevorgänge. In der Option `taxmod_shipping_settings` stehen nur die Kontakt-Nummer, die Bestätigungs-Mail und die Druckerwarteschlange.
 - ⚠️ *INFERRED:* «Country» ist Freitext. Gängige Namen werden auf ISO-Kürzel abgebildet, ein unbekannter Name geht unverändert an den Dienst.
-- E-Mail am Kontakt gibt es im Modell nicht; sie kommt als Nachtrag zur Karte D-1497.
-- ⚠️ *INFERRED:* Empfänger wird im Kauf-Dialog getippt; später Verweis auf Kontakte (D-1497).
+- «E-Mail» am Kontakt ist Teil von D-1497.
+- Empfänger: vorhandener Kontakt aus der Liste, oder im Kauf-Dialog getippt. Ein getippter Empfänger wird im selben Akt als neuer Person-Kontakt mit Adresse angelegt (D-1497).
+- ⚠️ *INFERRED:* Die Ids von Knoten, Feldern, Ständen und Einheiten kommen über Rollen (D-1394); die Live-Ids setzt WP-Upload beim Anlegen.
 - Preislisten für Dienste ohne Privat-API (GLS, Hermes, DPD) kommen als Daten ins Modell, nicht in den Code (D-1496), noch nicht gebaut.
 - Sammeldienste (Packlink PRO, Sendcloud, Shipcloud): später, Stefan entscheidet.
 - Briefe über Internetmarke (Portokasse): noch nicht gebaut.

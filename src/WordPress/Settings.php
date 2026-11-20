@@ -38,9 +38,18 @@ final class Settings
         return (string) ($this->all()['queue'] ?? '');
     }
 
-    public function save(int $senderContact, string $email, string $queue): void
+    /** @return array<string, int> carrier code → firm record (D-1497: «Dienst» is a firm) */
+    public function carrierFirms(): array
     {
-        update_option(self::OPTION, ['sender_contact' => $senderContact, 'email' => $email, 'queue' => $queue], false);
+        $map = $this->all()['carrier_firms'] ?? [];
+
+        return is_array($map) ? array_filter(array_map('intval', $map)) : [];
+    }
+
+    /** @param array<string, int> $carrierFirms */
+    public function save(int $senderContact, string $email, string $queue, array $carrierFirms): void
+    {
+        update_option(self::OPTION, ['sender_contact' => $senderContact, 'email' => $email, 'queue' => $queue, 'carrier_firms' => $carrierFirms], false);
     }
 
     /** @return array<string, mixed> */

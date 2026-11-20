@@ -5,6 +5,7 @@ namespace TaxmodShipping\WordPress;
 use Taxmod\WordPress\ModelDoor;
 use TaxmodShipping\Core\Address;
 use TaxmodShipping\Core\ContactAddress;
+use TaxmodShipping\Core\ShipmentRoles;
 use TaxmodShipping\Core\ShippingError;
 
 /**
@@ -20,23 +21,46 @@ final class Contacts
     private const SITE_FIELDS = ['contact_address' => 56070, 'address_street' => 76120, 'street_name' => 75475, 'house_number' => 75476,
         'address_zip_city' => 76121, 'postal_code' => 75479, 'city_name' => 75480, 'address_country' => 66341];
 
+    private const SITE_NODES = ['contact_person' => 14];
+
     private const ADOPTED = 'taxmod_shipping_roles_adopted';
+
+    /**
+     * The ids of «Sendungen», its states, the units and «E-Mail» at the contact (D-1497), written by whoever creates them in
+     * the model ({nodes, fields, values}); taken into the shared role table and then dropped, like the sales module's.
+     */
+    public const STRUCTURE = 'taxmod_shipping_structure';
 
     public static function register(): void
     {
         add_filter('taxmod_roles', static function (mixed $roles): array {
             $roles = is_array($roles) ? $roles : [];
-            $roles[] = ['module' => self::ROLE_MODULE, 'group' => 'nodes', 'key' => 'contact', 'required' => true];
-            foreach (ContactAddress::ROLES as $key) {
-                $roles[] = ['module' => self::ROLE_MODULE, 'group' => 'fields', 'key' => $key, 'required' => true];
+            foreach (['nodes' => ShipmentRoles::NODES, 'fields' => ShipmentRoles::FIELDS, 'values' => ShipmentRoles::VALUES] as $group => $keys) {
+                foreach ($keys as $key) {
+                    $roles[] = ['module' => self::ROLE_MODULE, 'group' => $group, 'key' => $key, 'required' => $key !== 'contact_email'];
+                }
             }
 
             return $roles;
         });
         add_action('admin_init', static function (): void {
-            if (get_option(self::ADOPTED) !== Plugin::VERSION && current_user_can(\Taxmod\WordPress\Plugin::CAPABILITY)) {
-                ModelDoor::adoptRoles(['fields' => self::SITE_FIELDS]);
+            if (! current_user_can(\Taxmod\WordPress\Plugin::CAPABILITY)) {
+                return;
+            }
+
+            if (get_option(self::ADOPTED) !== Plugin::VERSION) {
+                ModelDoor::adoptRoles(['nodes' => self::SITE_NODES, 'fields' => self::SITE_FIELDS]);
                 update_option(self::ADOPTED, Plugin::VERSION, false);
+            }
+
+            $structure = get_option(self::STRUCTURE);
+            if (is_array($structure)) {
+                $conflicts = ModelDoor::adoptRoles($structure);
+                if ($conflicts === []) {
+                    delete_option(self::STRUCTURE);
+                } else {
+                    error_log('Taxmod Versand: roles set differently in the modeller: ' . wp_json_encode($conflicts));
+                }
             }
         });
     }

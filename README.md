@@ -1,0 +1,12 @@
+# Taxmod Versand
+
+Shipping for the [Taxonomy Modeller](https://github.com/sfambach/wp-taxonomy-modeler): enter a parcel, compare the rates
+of every connected carrier cheapest first, buy the chosen label on the owner's click, print it on request.
+
+**Status 0.0.1** (needs modeller 0.2.133 and the Lager module's logistics frame): page *Logistik › Warenausgang › Versand*,
+settings *Logistik › Einstellungen › Versand* (sender, confirmation e-mail, printer queue). Carriers: DHL Online
+Frankierung via [wp_tax_api_dhl](https://github.com/sfambach/wp_tax_api_dhl) 0.0.20 or later. Concept: [docs/konzept.md](docs/konzept.md).
+
+## Development
+
+`composer install`, then `vendor/bin/phpunit` (core suite, no WordPress).

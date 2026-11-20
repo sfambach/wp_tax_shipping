@@ -14,6 +14,7 @@ use TaxmodShipping\Core\LetterRates;
 use TaxmodShipping\Core\MailLabels;
 use TaxmodShipping\Core\Money;
 use TaxmodShipping\Core\Parcel;
+use TaxmodShipping\Core\ParcelInput;
 use TaxmodShipping\Core\Purchase;
 use TaxmodShipping\Core\Rate;
 use TaxmodShipping\Core\RateComparison;
@@ -65,6 +66,8 @@ final class ShippingPage
     private ?WorkplacePrinters $printers = null;
 
     private ?Countries $countries = null;
+
+    private ?ParcelControls $parcelControls = null;
 
     /** D-1515: the labels on the page's front; the rest are behind «Alle Etiketten». */
     private const SHORT_LIST = 5;
@@ -180,6 +183,15 @@ final class ShippingPage
      */
     private function parcelFromRequest(array $source): Parcel|string|null
     {
+        // D-1538: the form's own controls; the buy dialog still carries the parcel as plain hidden numbers.
+        if (! isset($source['weight_g']) && isset($source[ParcelControls::PREFIX]) && $this->parcelControls()->available()) {
+            try {
+                return ParcelInput::of(ShipmentStore::roles(), $this->parcelControls()->typed($source), $this->countryFrom($source));
+            } catch (ShippingError) {
+                return __('Gewicht und alle drei Maße müssen über 0 liegen, Gewicht in Gramm und Maße in Meter (mit Präfix, z. B. cm).', 'taxmod-shipping');
+            }
+        }
+
         $values = [];
         foreach (self::PARCEL_FIELDS as $field) {
             $raw = isset($source[$field]) ? sanitize_text_field(wp_unslash((string) $source[$field])) : '';
@@ -190,6 +202,16 @@ final class ShippingPage
             return null;
         }
 
+        try {
+            return new Parcel((int) $values['weight_g'], (int) $values['length_cm'], (int) $values['width_cm'], (int) $values['height_cm'], $this->countryFrom($source));
+        } catch (ShippingError) {
+            return __('Gewicht und alle drei Maße müssen über 0 liegen; das Land ist ein Kürzel wie DE.', 'taxmod-shipping');
+        }
+    }
+
+    /** @param array<string, mixed> $source */
+    private function countryFrom(array $source): string
+    {
         $country = isset($source['country']) ? strtoupper(sanitize_key(wp_unslash((string) $source['country']))) : 'DE';
         // D-1532: a country chosen from the list «Länder» goes to the carriers as its ISO code.
         if (isset($source[Countries::FIELD])) {
@@ -197,11 +219,7 @@ final class ShippingPage
             $country = $chosen !== '' ? $chosen : $country;
         }
 
-        try {
-            return new Parcel((int) $values['weight_g'], (int) $values['length_cm'], (int) $values['width_cm'], (int) $values['height_cm'], $country === '' ? 'DE' : $country);
-        } catch (ShippingError) {
-            return __('Gewicht und alle drei Maße müssen über 0 liegen; das Land ist ein Kürzel wie DE.', 'taxmod-shipping');
-        }
+        return $country === '' ? 'DE' : $country;
     }
 
     /**
@@ -221,7 +239,13 @@ final class ShippingPage
 
         $template = (new PackagingStore())->find($chosen);
 
-        return $template === null ? $source : array_merge($source, array_filter($template->formValues(), static fn (string $v): bool => $v !== ''));
+        if ($template === null) {
+            return $source;
+        }
+
+        return $this->parcelControls()->available()
+            ? array_merge($source, [ParcelControls::PREFIX => $this->parcelControls()->partsOf($template)])
+            : array_merge($source, array_filter($template->formValues(), static fn (string $v): bool => $v !== ''));
     }
 
     /** @param array<string, mixed> $source */
@@ -230,19 +254,31 @@ final class ShippingPage
         $value = static fn (string $field): string => isset($source[$field]) ? sanitize_text_field(wp_unslash((string) $source[$field])) : '';
         $number = static fn (string $field, string $unit): string => ListPage::quantity($field, $unit, $value($field), ['id' => 'taxship-' . $field, 'size' => '8']);
         $packagings = new PackagingStore();
+        $controlled = $this->parcelControls()->available();
         $chosen = absint($source['packaging'] ?? 0);
         $templateRow = $packagings->root() === 0 ? [] : [[
             'label' => __('Vorlage', 'taxmod-shipping'),
             // The template's values ride with the field, so a choice fills the form at once (Stefan 20.11.); the server fills too, without script.
             'control' => '<input type="hidden" name="applied_packaging" value="' . esc_attr((string) $chosen) . '" data-taxship-packagings="'
-                . esc_attr((string) wp_json_encode(array_map(static fn (\TaxmodShipping\Core\Packaging $p): array => $p->formValues(), $packagings->all()))) . '">'
+                . esc_attr((string) wp_json_encode(array_map(fn (\TaxmodShipping\Core\Packaging $p): array => $controlled ? $this->parcelControls()->namesOf($p) : $p->formValues(), $packagings->all()))) . '">'
                 . \Taxmod\WordPress\Admin\RecordPick::field('packaging', $packagings->pickTree(), $chosen > 0 ? $chosen : null),
             'hint' => __('Versandverpackung aus dem Lager: füllt Maße und Gewicht (Höchstgewicht). Alles bleibt änderbar.', 'taxmod-shipping'),
         ]];
-        $country = $value('country') === '' ? 'DE' : $value('country');
-        if (isset($source[Countries::FIELD])) {
-            $chosen = $this->countries()->codes()->codeOf(absint($source[Countries::FIELD]));
-            $country = $chosen !== '' ? $chosen : $country;
+        $country = $this->countryFrom($source);
+        if ($controlled) {
+            // D-1538: the modeller's unit values, filled with what was typed or what the template gave.
+            $controls = $this->parcelControls()->controls($this->parcelControls()->typed($source));
+            $sizeRows = [
+                ['label' => __('Gewicht', 'taxmod-shipping'), 'control' => $controls['weight'], 'hint' => __('Mit Verpackung.', 'taxmod-shipping')],
+                ['label' => __('Abmessung', 'taxmod-shipping'), 'control' => $controls['dimension']],
+            ];
+        } else {
+            $sizeRows = [
+                ['label' => __('Gewicht', 'taxmod-shipping'), 'control' => $number('weight_g', 'g'), 'for' => 'taxship-weight_g', 'hint' => __('Mit Verpackung.', 'taxmod-shipping')],
+                ['label' => __('Länge', 'taxmod-shipping'), 'control' => $number('length_cm', 'cm'), 'for' => 'taxship-length_cm'],
+                ['label' => __('Breite', 'taxmod-shipping'), 'control' => $number('width_cm', 'cm'), 'for' => 'taxship-width_cm'],
+                ['label' => __('Höhe', 'taxmod-shipping'), 'control' => $number('height_cm', 'cm'), 'for' => 'taxship-height_cm'],
+            ];
         }
         $countryRow = $this->countries()->root() > 0
             ? ['label' => __('Zielland', 'taxmod-shipping'), 'control' => $this->countries()->chooser($country)]
@@ -256,14 +292,16 @@ final class ShippingPage
             . '<input type="hidden" name="page" value="taxmod-lager-modul"><input type="hidden" name="module" value="' . esc_attr(Plugin::SLUG) . '">'
             . ListPage::form([
                 ...$templateRow,
-                ['label' => __('Gewicht', 'taxmod-shipping'), 'control' => $number('weight_g', 'g'), 'for' => 'taxship-weight_g', 'hint' => __('Mit Verpackung.', 'taxmod-shipping')],
-                ['label' => __('Länge', 'taxmod-shipping'), 'control' => $number('length_cm', 'cm'), 'for' => 'taxship-length_cm'],
-                ['label' => __('Breite', 'taxmod-shipping'), 'control' => $number('width_cm', 'cm'), 'for' => 'taxship-width_cm'],
-                ['label' => __('Höhe', 'taxmod-shipping'), 'control' => $number('height_cm', 'cm'), 'for' => 'taxship-height_cm'],
+                ...$sizeRows,
                 $countryRow,
             ], '<button type="submit" class="button button-primary">' . ListPage::icon('search', __('Tarife vergleichen', 'taxmod-shipping')) . ' ' . esc_html__('Tarife vergleichen', 'taxmod-shipping') . '</button>'
                 . ($stamp ? ' ' . $this->stampDialog() : ''))
             . '</form>';
+    }
+
+    private function parcelControls(): ParcelControls
+    {
+        return $this->parcelControls ??= new ParcelControls();
     }
 
     private function countries(): Countries

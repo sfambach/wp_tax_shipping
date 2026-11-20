@@ -145,3 +145,9 @@ Offen: Gewicht und Abmessung im Vergleichsformular als Modeller-Eingaben, sobald
 Stefan 20.11. 20:52: «die länderliste mal nach kontinenten ordnen also kontinent als übergeordnetes». Unter «Länder» stehen sieben Kontinente (Klasse Kategorie, Name englisch, Beschriftung je Sprache), darunter die Länder. Die Länder werden verschoben, nicht neu angelegt: ihre Knoten-Ids und Symbole bleiben. `Countries` liest den Baum zwei Ebenen tief, und `CountryCodes::groups` macht die Liste und jeden Knoten mit Kindern im Wähler unwählbar (`CountryCodesTest`).
 
 INFERRED: Zuordnung nach UN M49 (Russland Europa; Türkiye, Zypern, Kaukasus Asien; Grönland, Mittelamerika, Karibik Nordamerika; Antarktis nur AQ).
+
+## Gewicht und Abmessung als Einheitswert (0.0.17, D-1538)
+
+Stefan 20.11. 20:55: «die felder sind aber immer noch keine standard felder also abmessung und gewicht als einheitswert». Das Formular zeigt Gewicht und Abmessung jetzt mit den Eingaben des Modellers für die Felder von «Sendungen» (`ModelDoor::controls`, D-1250) und liest sie mit `typed()` zurück. Erst ab Modeller 0.2.190 geht das in beide Richtungen, auch für Teile in Teilen; ab 0.2.191 steht jeder Einheitswert in einer Zeile (Datenjob kompakt-apply.json), deshalb verlangt Versand 0.2.191. `ParcelInput` macht daraus Gramm und Zentimeter für die Dienste, mit der Lesung, die die Vorlagen schon benutzen (`Packagings::scaled`). Eine Einheit, die nicht zum Feld passt (Länge in Gramm), wird abgewiesen. Eine Vorlage füllt die Felder in der Teilform (`ParcelInput::parts`): serverseitig über `controls($values)`, im Browser über die Feldnamen. Mit einem älteren Modeller bleiben die Zahlenfelder. Der Kauf-Dialog trägt die Sendung weiter als versteckte Zahlen.
+
+Offen (Prüftor): Die Einheiten-Auswahl bietet alle Einheiten an. Die Beschriftungen «wert/prefix/einheit/laenge» kommen aus dem Modell.

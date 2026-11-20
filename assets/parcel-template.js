@@ -21,7 +21,8 @@
 		}
 
 		Object.keys(values).forEach(function (name) {
-			var input = document.getElementById('taxship-' + name);
+			// D-1538: the modeller's controls are found by the name they post under, the page's own fields by id.
+			var input = document.getElementById('taxship-' + name) || document.querySelector('[name="' + name.replace(/"/g, '') + '"]');
 
 			if (input && values[name] !== '') {
 				input.value = values[name];

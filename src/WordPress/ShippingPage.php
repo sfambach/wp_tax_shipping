@@ -219,7 +219,7 @@ final class ShippingPage
             . wp_nonce_field(self::BUY, '_wpnonce', true, false) . $hidden
             . '<input type="hidden" name="carrier" value="' . esc_attr($rate->carrier) . '"><input type="hidden" name="product" value="' . esc_attr($rate->product) . '">'
             . '<input type="hidden" name="price_cents" value="' . esc_attr((string) $rate->priceCents) . '"></form>'
-            . ListPage::dialogAction($switch, __('Kaufen', 'taxmod-shipping'), $shop ? __('Briefmarke bei der Post kaufen', 'taxmod-shipping') : __('Etikett kaufen', 'taxmod-shipping'), $body, 'action', self::BUY, sprintf(
+            . ListPage::dialogAction($switch, $shop ? __('Im Post-Shop kaufen und hier als gekauft eintragen', 'taxmod-shipping') : __('Etikett kaufen', 'taxmod-shipping'), $shop ? __('Briefmarke bei der Post kaufen', 'taxmod-shipping') : __('Etikett kaufen', 'taxmod-shipping'), $body, 'action', self::BUY, sprintf(
                 /* translators: %s: price */
                 $shop ? __('Als gekauft eintragen (%s)', 'taxmod-shipping') : __('Für %s kaufen', 'taxmod-shipping'),
                 self::euro($rate->priceCents)

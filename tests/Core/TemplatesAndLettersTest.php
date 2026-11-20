@@ -30,7 +30,7 @@ final class TemplatesAndLettersTest extends TestCase
         $all = Packagings::of(self::roles(), [7 => [10 => ['100'], 11 => ['101'], 12 => ['102'], 14 => ['104']]],
             [100 => [1 => ['18'], 2 => ['90']], 101 => [1 => ['12'], 2 => ['90']], 102 => [1 => ['2'], 2 => ['90']], 104 => [1 => ['500']]], [7 => 'A6 Luftpolster']);
 
-        self::assertSame(['weight_g' => '499', 'length_cm' => '18', 'width_cm' => '12', 'height_cm' => '2'], $all[7]->formValues());
+        self::assertSame(['weight_g' => '500', 'length_cm' => '18', 'width_cm' => '12', 'height_cm' => '2'], $all[7]->formValues());
     }
 
     public function testLetterOffersOnlyWhatFitsAndLinksToTheShop(): void

@@ -53,7 +53,7 @@ Beschlüsse: **D-1505** (Versandverpackungen als Materialgruppe unter Verbrauchs
 
 ```mermaid
 flowchart LR
-  V["Vorlage gewählt"] --> F["Maße + Höchstgewicht − 1 g ins Formular"]
+  V["Vorlage gewählt"] --> F["Maße + Höchstgewicht ins Formular"]
   F --> T["Tarife: Dienste + Briefpreisliste"]
   T -- Brief --> S["Shop der Post öffnen, dort zahlen"]
   S --> E["Als gekauft eintragen: Satz «Sendungen», Stand bezahlt"]
@@ -91,3 +91,22 @@ flowchart LR
 ```
 
 INFERRED: Der Leser kennt das Layout der Internetmarke vom 20.11.2026 (Datum und Preis in einer Zeile, Nummer «A0 …», Empfängerblock darunter, letzte Zeile PLZ und Ort). Was er nicht findet, bleibt leer. Das Produkt ist das Briefprodukt mit gleichem Preis, sonst «Einschreiben», wenn die Marke es sagt; sonst leer.
+
+## Marken aus Mails, ein PDF-Baustein (D-1511)
+
+Stefan 20.11. 15:26: «gleiche Funktionalität», 15:27: «Upload brauchen wir dennoch». Wählen und Lesen eines Porto-PDF macht nur das Etikettenmodul (`taxmodLabel62.pick()`, `taxmodLabel62.lines()`). `stamp-upload.js` öffnet selbst kein PDF mehr; es füllt nur die Felder aus den Zeilen, die das Etikettenmodul liefert.
+
+Neu ist der Abschnitt «Aus Mails». Er zeigt die Marken, die das Mail-Modul aus Mails gelesen hat (Filter `taxmail_shipping_labels`) und die noch keine Sendung haben. «Sendung anlegen und drucken» holt das PDF über das Mail-Modul (`taxmail_shipping_label_pdf`, nur gespeicherte Links) und öffnet damit denselben Dialog wie der Upload. Die Sendung bekommt die Referenz «mail-<Warenkorb>» und die Firma ihres Dienstes (DHL oder Post). Danach meldet Versand dem Mail-Modul den Druck (`taxmail_shipping_label_printed`), und die Marke verschwindet aus der Liste.
+
+```mermaid
+flowchart LR
+  M["Mail-Modul: Marken aus Mails"] --> A["Aus Mails"]
+  U["PDF wählen (Etiketten)"] --> D["Dialog"]
+  A -- "PDF über Mail-Modul" --> D
+  D -- "Zeilen (Etiketten)" --> F["Felder füllen"]
+  F -- "Eintragen und drucken" --> S["Sendung, Referenz mail-…"]
+```
+
+OFFEN: Ob die Post nach einem Kauf im Shop eine Mail mit der Marke schickt, ist nicht geprüft. Bis dahin kommen in «Aus Mails» nur DHL-Online-Frankierungen.
+
+Vorlage (Stefan 20.11. 15:33, «das mit dem -1 ist albern nim doch die richtigen masse»): Die Vorlage füllt das echte Höchstgewicht, nicht mehr «− 1 g».

@@ -59,7 +59,7 @@ flowchart LR
   S --> E["Als gekauft eintragen: Satz «Sendungen», Stand bezahlt"]
 ```
 
-- Die Vorlage ist ein Material der Gruppe «Versandverpackungen» (Rolle `packaging`). Gewählt wird sie mit dem Satz-Wähler des Modellers (D-1182), in dem man gleich eine neue Vorlage anlegen kann. Es wird nur gelesen, und was der Besitzer danach tippt, gilt.
+- Die Vorlage ist ein Material der Gruppe «Versandverpackungen» (Rolle `packaging`). Gewählt wird sie mit dem Satz-Wähler des Modellers (D-1182), in dem man gleich eine neue Vorlage anlegen kann. Es wird nur gelesen, und was der Besitzer danach tippt, gilt. Die Felder füllen sich sofort bei der Wahl (Skript `parcel-template.js`); ohne Skript beim nächsten «Tarife vergleichen».
 - Briefe sind Sätze in «Briefprodukte» (Rolle `letter_product`): Name, Produktnummer, Preis, Höchstmaße, Höchstgewicht und Shop. Ein Produkt ohne https-Shop oder ohne Preis wird nicht angeboten.
 - Kauf: Bei uns fließt kein Geld. Stefan hat keine Portokasse, und die Internetmarke-API verkauft nur gegen Portokasse.
 - ⚠️ *INFERRED:* Die Briefpreisliste gilt nur für das Zielland DE.

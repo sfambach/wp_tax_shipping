@@ -64,6 +64,8 @@ final class ShippingPage
 
         $sections[] = ['title' => __('Gekaufte Etiketten', 'taxmod-shipping'), 'html' => (self::canPrintPostage() ? $this->stampDialog() : '') . $this->purchases()];
 
+        wp_enqueue_script('taxship-parcel', plugins_url('assets/parcel-template.js', dirname(__DIR__, 2) . '/wp_tax_shipping.php'), [], Plugin::VERSION, true);
+
         if (self::canPrintPostage()) {
             wp_enqueue_script(self::LABEL62);
             wp_enqueue_script('taxship-stamp', plugins_url('assets/stamp-upload.js', dirname(__DIR__, 2) . '/wp_tax_shipping.php'), [self::LABEL62], Plugin::VERSION, true);
@@ -126,7 +128,9 @@ final class ShippingPage
         $chosen = absint($source['packaging'] ?? 0);
         $templateRow = $packagings->root() === 0 ? [] : [[
             'label' => __('Vorlage', 'taxmod-shipping'),
-            'control' => '<input type="hidden" name="applied_packaging" value="' . esc_attr((string) $chosen) . '">'
+            // The template's values ride with the field, so a choice fills the form at once (Stefan 20.11.); the server fills too, without script.
+            'control' => '<input type="hidden" name="applied_packaging" value="' . esc_attr((string) $chosen) . '" data-taxship-packagings="'
+                . esc_attr((string) wp_json_encode(array_map(static fn (\TaxmodShipping\Core\Packaging $p): array => $p->formValues(), $packagings->all()))) . '">'
                 . \Taxmod\WordPress\Admin\RecordPick::field('packaging', $packagings->pickTree(), $chosen > 0 ? $chosen : null),
             'hint' => __('Versandverpackung aus dem Lager: füllt Maße und Gewicht (Höchstgewicht − 1 g). Alles bleibt änderbar.', 'taxmod-shipping'),
         ]];

@@ -16,6 +16,8 @@ final class Rate
         public readonly int $priceCents,
         public readonly bool $tracked,
         public readonly int $liabilityEuro,
+        /** D-1506: bought in the carrier's own shop; this module links there and records the purchase afterwards. */
+        public readonly string $shopUrl = '',
     ) {
     }
 
@@ -36,6 +38,7 @@ final class Rate
             (int) $entry['price_cents'],
             (bool) ($entry['tracked'] ?? false),
             is_numeric($entry['liability_eur'] ?? null) ? (int) $entry['liability_eur'] : 0,
+            is_string($entry['shop_url'] ?? null) && str_starts_with($entry['shop_url'], 'https://') ? $entry['shop_url'] : '',
         );
     }
 

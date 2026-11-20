@@ -21,7 +21,7 @@ use Taxmod\WordPress\Admin\ListPage;
  */
 final class Plugin
 {
-    public const VERSION      = '0.0.2';
+    public const VERSION      = '0.0.3';
     public const MIN_MODELLER = '0.2.172';
     public const SLUG         = 'taxmod-versand';
     public const SETTINGS     = 'taxmod-versand-einstellungen';
@@ -49,6 +49,7 @@ final class Plugin
 
             add_filter('taxmod_logistics_pages', self::pages(...));
             Contacts::register();
+            LetterPrices::register();
 
             if (\Taxmod\WordPress\Plugin::handlesAdminActions()) {
                 $page = new ShippingPage();

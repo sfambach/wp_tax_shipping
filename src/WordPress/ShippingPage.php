@@ -43,8 +43,9 @@ final class ShippingPage
             return '';
         }
 
-        $parcel = $this->parcelFromRequest($_GET);
-        $sections = [['title' => __('Sendung', 'taxmod-shipping'), 'html' => $this->parcelForm($parcel)]];
+        $source = $this->withPackaging($_GET);
+        $parcel = $this->parcelFromRequest($source);
+        $sections = [['title' => __('Sendung', 'taxmod-shipping'), 'html' => $this->parcelForm($parcel, $source)]];
 
         if ($parcel instanceof Parcel) {
             $sections[] = ['title' => __('Tarife', 'taxmod-shipping'), 'html' => $this->offers($parcel)];
@@ -82,15 +83,45 @@ final class ShippingPage
         }
     }
 
-    private function parcelForm(Parcel|string|null $parcel): string
+    /**
+     * D-1505: a template chosen anew fills the edges and the weight; once applied, what the owner typed wins, so the
+     * template can be a start and nothing more. Reading only — nothing is written.
+     *
+     * @param array<string, mixed> $source $_GET
+     * @return array<string, mixed>
+     */
+    private function withPackaging(array $source): array
     {
-        $value = static fn (string $field): string => isset($_GET[$field]) ? sanitize_text_field(wp_unslash((string) $_GET[$field])) : '';
-        $number = static fn (string $field, string $unit): string => ListPage::quantity($field, $unit, $value($field), ['id' => 'taxship-' . $field, 'required' => 'required', 'size' => '8']);
+        $chosen = absint($source['packaging'] ?? 0);
+
+        if ($chosen === 0 || $chosen === absint($source['applied_packaging'] ?? 0)) {
+            return $source;
+        }
+
+        $template = (new PackagingStore())->find($chosen);
+
+        return $template === null ? $source : array_merge($source, array_filter($template->formValues(), static fn (string $v): bool => $v !== ''));
+    }
+
+    /** @param array<string, mixed> $source */
+    private function parcelForm(Parcel|string|null $parcel, array $source): string
+    {
+        $value = static fn (string $field): string => isset($source[$field]) ? sanitize_text_field(wp_unslash((string) $source[$field])) : '';
+        $number = static fn (string $field, string $unit): string => ListPage::quantity($field, $unit, $value($field), ['id' => 'taxship-' . $field, 'size' => '8']);
+        $packagings = new PackagingStore();
+        $chosen = absint($source['packaging'] ?? 0);
+        $templateRow = $packagings->root() === 0 ? [] : [[
+            'label' => __('Vorlage', 'taxmod-shipping'),
+            'control' => '<input type="hidden" name="applied_packaging" value="' . esc_attr((string) $chosen) . '">'
+                . \Taxmod\WordPress\Admin\RecordPick::field('packaging', $packagings->pickTree(), $chosen > 0 ? $chosen : null),
+            'hint' => __('Versandverpackung aus dem Lager: füllt Maße und Gewicht (Höchstgewicht − 1 g). Alles bleibt änderbar.', 'taxmod-shipping'),
+        ]];
         $country = $value('country') === '' ? 'DE' : $value('country');
 
         return '<form method="get" action="' . esc_url(admin_url('admin.php')) . '">'
             . '<input type="hidden" name="page" value="taxmod-lager-modul"><input type="hidden" name="module" value="' . esc_attr(Plugin::SLUG) . '">'
             . ListPage::form([
+                ...$templateRow,
                 ['label' => __('Gewicht', 'taxmod-shipping'), 'control' => $number('weight_g', 'g'), 'for' => 'taxship-weight_g', 'hint' => __('Mit Verpackung.', 'taxmod-shipping')],
                 ['label' => __('Länge', 'taxmod-shipping'), 'control' => $number('length_cm', 'cm'), 'for' => 'taxship-length_cm'],
                 ['label' => __('Breite', 'taxmod-shipping'), 'control' => $number('width_cm', 'cm'), 'for' => 'taxship-width_cm'],
@@ -148,13 +179,24 @@ final class ShippingPage
             $hidden .= '<input type="hidden" name="' . esc_attr($name) . '" value="' . esc_attr((string) $value) . '">';
         }
 
-        $body = '<p>' . esc_html(sprintf(
-            /* translators: 1: carrier, 2: product, 3: price */
-            __('%1$s %2$s für %3$s kaufen. Bezahlt wird danach auf der Seite des Dienstes.', 'taxmod-shipping'),
-            strtoupper($rate->carrier),
-            $rate->name,
-            self::euro($rate->priceCents)
-        )) . '</p>'
+        $shop = $rate->shopUrl !== '';
+        $body = ($shop
+            ? '<p>' . esc_html(sprintf(
+                /* translators: 1: product, 2: price */
+                __('%1$s für %2$s: Die Marke kaufst du im Shop der Post (dort auch mit PayPal). Danach hier eintragen; hier fließt kein Geld.', 'taxmod-shipping'),
+                $rate->name,
+                self::euro($rate->priceCents)
+            )) . '</p><p><a class="button" href="' . esc_url($rate->shopUrl) . '" target="_blank" rel="noopener noreferrer">' . ListPage::icon('external', __('Shop der Post öffnen', 'taxmod-shipping')) . ' '
+                . esc_html__('Shop der Post öffnen', 'taxmod-shipping') . '</a></p>'
+                . '<label style="display:block;margin:.3em 0"><span style="display:inline-block;width:9em">' . esc_html__('Sendungsnummer', 'taxmod-shipping') . '</span>'
+                . ListPage::field(InputKind::Line, 'number', '', ['form' => $formId, 'size' => '24', 'placeholder' => __('falls vorhanden', 'taxmod-shipping')]) . '</label>'
+            : '<p>' . esc_html(sprintf(
+                /* translators: 1: carrier, 2: product, 3: price */
+                __('%1$s %2$s für %3$s kaufen. Bezahlt wird danach auf der Seite des Dienstes.', 'taxmod-shipping'),
+                strtoupper($rate->carrier),
+                $rate->name,
+                self::euro($rate->priceCents)
+            )) . '</p>')
             . '<label style="display:block;margin:.3em 0"><span style="display:inline-block;width:9em">' . esc_html__('Empfänger', 'taxmod-shipping') . '</span>'
             . '<select name="receiver_contact" form="' . esc_attr($formId) . '" style="width:16em">' . $contacts . '</select></label>'
             . $field('name', __('Name', 'taxmod-shipping'))
@@ -167,9 +209,9 @@ final class ShippingPage
             . wp_nonce_field(self::BUY, '_wpnonce', true, false) . $hidden
             . '<input type="hidden" name="carrier" value="' . esc_attr($rate->carrier) . '"><input type="hidden" name="product" value="' . esc_attr($rate->product) . '">'
             . '<input type="hidden" name="price_cents" value="' . esc_attr((string) $rate->priceCents) . '"></form>'
-            . ListPage::dialogAction($switch, __('Kaufen', 'taxmod-shipping'), __('Etikett kaufen', 'taxmod-shipping'), $body, 'action', self::BUY, sprintf(
+            . ListPage::dialogAction($switch, __('Kaufen', 'taxmod-shipping'), $shop ? __('Briefmarke bei der Post kaufen', 'taxmod-shipping') : __('Etikett kaufen', 'taxmod-shipping'), $body, 'action', self::BUY, sprintf(
                 /* translators: %s: price */
-                __('Für %s kaufen', 'taxmod-shipping'),
+                $shop ? __('Als gekauft eintragen (%s)', 'taxmod-shipping') : __('Für %s kaufen', 'taxmod-shipping'),
                 self::euro($rate->priceCents)
             ), $formId, 'cart');
     }
@@ -279,7 +321,11 @@ final class ShippingPage
             throw new ShippingError(__('Das Modell kennt «Sendungen» noch nicht (fehlende Rollen):', 'taxmod-shipping') . ' ' . implode(', ', $missing));
         }
 
-        $answer = apply_filters(Plugin::BUY, null, $rate->toArray(), ['sender' => $sender->toArray(), 'receiver' => $receiver->toArray(), 'email' => $settings->email()]);
+        // D-1506: bought in the carrier's shop by the owner; this only records it, nothing is asked of a carrier module.
+        $number = sanitize_text_field(wp_unslash((string) ($_POST['number'] ?? '')));
+        $answer = $rate->shopUrl !== ''
+            ? ['carrier' => $rate->carrier, 'reference' => 'shop-' . current_time('YmdHis'), 'state' => 'paid', 'numbers' => $number === '' ? [] : [$number]]
+            : apply_filters(Plugin::BUY, null, $rate->toArray(), ['sender' => $sender->toArray(), 'receiver' => $receiver->toArray(), 'email' => $settings->email()]);
         $purchase = Purchase::bought('', $rate, $receiver->name, is_array($answer) ? $answer : null, current_time('mysql'));
         (new ShipmentStore())->add($purchase, $parcel, $contact > 0 ? $contact : $typed, $settings->senderContact(), $firm);
 

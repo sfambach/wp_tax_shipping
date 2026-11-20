@@ -8,6 +8,8 @@ use Taxmod\WordPress\Admin\ListPage;
 use Taxmod\WordPress\Admin\RecordPick;
 use Taxmod\WordPress\ModelDoor;
 use TaxmodShipping\Core\Address;
+use TaxmodShipping\Core\LabelOrigin;
+use TaxmodShipping\Core\LabelRows;
 use TaxmodShipping\Core\LetterRates;
 use TaxmodShipping\Core\MailLabels;
 use TaxmodShipping\Core\Money;
@@ -58,6 +60,9 @@ final class ShippingPage
 
     private ?WorkplacePrinters $printers = null;
 
+    /** D-1515: the labels on the page's front; the rest are behind «Alle Etiketten». */
+    private const SHORT_LIST = 5;
+
     private const PARCEL_FIELDS = ['weight_g', 'length_cm', 'width_cm', 'height_cm'];
 
     public static function url(array $query = []): string
@@ -69,6 +74,14 @@ final class ShippingPage
     {
         if (! current_user_can(\Taxmod\WordPress\Plugin::CAPABILITY)) {
             return '';
+        }
+
+        if (isset($_GET['label'])) {
+            return $this->oneLabel(absint($_GET['label']));
+        }
+
+        if (sanitize_key(wp_unslash((string) ($_GET['view'] ?? ''))) === 'labels') {
+            return $this->allLabels();
         }
 
         $source = $this->withPackaging($_GET);
@@ -86,12 +99,19 @@ final class ShippingPage
             $sections[] = ['html' => '<div class="notice notice-warning inline"><p>' . esc_html($parcel) . '</p></div>'];
         }
 
-        if (self::canPrintPostage() && has_filter(self::MAIL_LABELS)) {
-            $sections[] = ['title' => __('Aus Mails', 'taxmod-shipping'), 'html' => $this->mailLabels()];
-        }
+        // D-1515: one list of labels, the newest five here, all of them one click away.
+        $sections[] = ['title' => __('Etiketten', 'taxmod-shipping'), 'html' => (self::canPrintPostage() ? $this->stampDialog() : '') . $this->labels(self::SHORT_LIST)];
 
-        $sections[] = ['title' => __('Gekaufte Etiketten', 'taxmod-shipping'), 'html' => (self::canPrintPostage() ? $this->stampDialog() : '') . $this->purchases()];
+        return $this->page(__('Versand', 'taxmod-shipping'), $sections);
+    }
 
+    /**
+     * The same scripts on every view of this page: the template fill, the stamp dialog, the 62 mm print.
+     *
+     * @param list<array{title?: string, html: string}> $sections
+     */
+    private function page(string $title, array $sections): string
+    {
         wp_enqueue_script('taxship-parcel', plugins_url('assets/parcel-template.js', dirname(__DIR__, 2) . '/wp_tax_shipping.php'), [], Plugin::VERSION, true);
 
         if (self::canPrintPostage()) {
@@ -99,7 +119,52 @@ final class ShippingPage
             wp_enqueue_script('taxship-stamp', plugins_url('assets/stamp-upload.js', dirname(__DIR__, 2) . '/wp_tax_shipping.php'), [self::LABEL62], Plugin::VERSION, true);
         }
 
-        return ListPage::page(__('Versand', 'taxmod-shipping'), [], $sections, Plugin::VERSION, 'Taxmod Versand');
+        return ListPage::page($title, [], $sections, Plugin::VERSION, 'Taxmod Versand');
+    }
+
+    /** D-1515: every label, the same list as on the page's front with no limit. */
+    private function allLabels(): string
+    {
+        $html = '<p>' . ListPage::back(self::url(), __('Zurück zum Versand', 'taxmod-shipping')) . '</p>' . (self::canPrintPostage() ? $this->stampDialog() : '') . $this->labels(null);
+
+        return $this->page(__('Etiketten', 'taxmod-shipping'), [['title' => __('Alle Etiketten', 'taxmod-shipping'), 'html' => $html]]);
+    }
+
+    /** D-1515, D-1376: one label in the standard single view — status, back to the list, its actions, its data. */
+    private function oneLabel(int $id): string
+    {
+        try {
+            $purchase = $this->all()[$id] ?? null;
+        } catch (ShippingError $failure) {
+            $purchase = null;
+        }
+
+        if ($purchase === null) {
+            return $this->page(__('Etiketten', 'taxmod-shipping'), [['html' => '<div class="notice notice-warning inline"><p>' . esc_html__('Dieses Etikett gibt es nicht.', 'taxmod-shipping') . '</p></div>'
+                . ListPage::back(self::url(['view' => 'labels']), __('Alle Etiketten', 'taxmod-shipping'))]]);
+        }
+
+        $facts = [
+            [esc_html__('Herkunft', 'taxmod-shipping'), esc_html(self::originWord(LabelOrigin::of($purchase->reference)))],
+            [esc_html__('Gekauft', 'taxmod-shipping'), esc_html(ListPage::date($purchase->createdAt))],
+            [esc_html__('Dienst', 'taxmod-shipping'), esc_html(strtoupper($purchase->rate->carrier))],
+            [esc_html__('Produkt', 'taxmod-shipping'), esc_html($purchase->rate->name)],
+            [esc_html__('Preis', 'taxmod-shipping'), esc_html(self::euro($purchase->rate->priceCents))],
+            [esc_html__('Empfänger', 'taxmod-shipping'), esc_html($purchase->receiver)],
+            [esc_html__('Sendungsnummer', 'taxmod-shipping'), esc_html(implode(', ', $purchase->numbers))],
+            [esc_html__('Referenz', 'taxmod-shipping'), esc_html($purchase->reference)],
+        ];
+        $steps = [['awaiting_payment', __('wartet auf Bezahlung', 'taxmod-shipping')], ['paid', __('bezahlt', 'taxmod-shipping')]];
+
+        return $this->page(__('Etiketten', 'taxmod-shipping'), [['html' => ListPage::record(
+            $purchase->rate->name,
+            $steps,
+            $purchase->isPaid() ? 'paid' : 'awaiting_payment',
+            ListPage::stepButton(__('Alle Etiketten', 'taxmod-shipping'), false, self::url(['view' => 'labels'])),
+            '',
+            [$this->purchaseButtons($purchase)],
+            ListPage::grid([[__('Feld', 'taxmod-shipping')], [__('Wert', 'taxmod-shipping')]], $facts)
+        )]]);
     }
 
     /**
@@ -275,64 +340,70 @@ final class ShippingPage
     }
 
     /**
-     * D-1511: labels bought elsewhere (DHL online, the Post shop) that the mail module read from their mails and no shipment holds yet.
-     * «Sendung anlegen» loads the PDF into the same dialog as an uploaded stamp; nothing is recorded before that dialog is confirmed.
+     * D-1515: shipments and the labels from mails that no shipment holds yet, as one list with their origin (D-1511: a label from a
+     * mail is turned into a shipment in the stamp dialog by its row's button). With a limit, the newest ones and a link to all.
      */
-    private function mailLabels(): string
+    private function labels(?int $limit): string
     {
         try {
-            $references = array_values(array_map(static fn (Purchase $purchase): string => $purchase->reference, $this->all()));
-        } catch (ShippingError) {
-            $references = [];
-        }
-
-        $rows = [];
-
-        foreach (MailLabels::open(apply_filters(self::MAIL_LABELS, []), $references) as $label) {
-            $pdf = wp_nonce_url(add_query_arg(['action' => self::MAIL_PDF, 'link' => rawurlencode($label['link'])], admin_url('admin-post.php')), self::MAIL_PDF);
-            $rows[] = [
-                esc_html(ListPage::date($label['date'])),
-                esc_html(strtoupper($label['carrier'])),
-                esc_html($label['cart']),
-                '<button type="button" class="button" data-taxship-mail-pdf="' . esc_url($pdf) . '" data-taxship-mail-cart="' . esc_attr($label['cart']) . '" data-taxship-mail-carrier="' . esc_attr($label['carrier']) . '" title="' . esc_attr__('Sendung anlegen und drucken', 'taxmod-shipping') . '">'
-                    . ListPage::icon('upload', __('Sendung anlegen und drucken', 'taxmod-shipping')) . '</button>',
-            ];
-        }
-
-        return ListPage::grid(
-            [[__('Gekauft', 'taxmod-shipping')], [__('Dienst', 'taxmod-shipping')], [__('Warenkorb', 'taxmod-shipping')], ['']],
-            $rows,
-            esc_html__('Keine offenen Marken aus Mails.', 'taxmod-shipping')
-        );
-    }
-
-    private function purchases(): string
-    {
-        $rows = [];
-
-        try {
-            $all = $this->all();
+            $purchases = $this->all();
         } catch (ShippingError $failure) {
             return '<div class="notice notice-warning inline"><p>' . esc_html($failure->getMessage()) . '</p></div>';
         }
 
-        foreach ($all as $purchase) {
-            $rows[] = [
-                esc_html($purchase->createdAt),
-                esc_html($purchase->receiver),
-                esc_html(strtoupper($purchase->rate->carrier) . ' ' . $purchase->rate->name),
-                esc_html(self::euro($purchase->rate->priceCents)),
-                $purchase->isPaid() ? esc_html__('bezahlt', 'taxmod-shipping') : esc_html__('wartet auf Bezahlung', 'taxmod-shipping'),
-                esc_html(implode(', ', $purchase->numbers)),
-                $this->purchaseButtons($purchase),
-            ];
+        $all = LabelRows::of($purchases, self::canPrintPostage() ? apply_filters(self::MAIL_LABELS, []) : []);
+        $rows = [];
+
+        foreach ($limit === null ? $all : array_slice($all, 0, $limit) as $row) {
+            $purchase = $row['purchase'];
+            $mail = $row['mail'];
+
+            if ($purchase !== null) {
+                $rows[] = [
+                    esc_html(ListPage::date($purchase->createdAt)),
+                    esc_html(self::originWord($row['origin'])),
+                    esc_html($purchase->receiver),
+                    '<a href="' . esc_url(self::url(['label' => $purchase->id])) . '">' . esc_html(strtoupper($purchase->rate->carrier) . ' ' . $purchase->rate->name) . '</a>',
+                    esc_html(self::euro($purchase->rate->priceCents)),
+                    $purchase->isPaid() ? esc_html__('bezahlt', 'taxmod-shipping') : esc_html__('wartet auf Bezahlung', 'taxmod-shipping'),
+                    esc_html(implode(', ', $purchase->numbers)),
+                    $this->purchaseButtons($purchase),
+                ];
+            } elseif ($mail !== null) {
+                $pdf = wp_nonce_url(add_query_arg(['action' => self::MAIL_PDF, 'link' => rawurlencode($mail['link'])], admin_url('admin-post.php')), self::MAIL_PDF);
+                $rows[] = [
+                    esc_html(ListPage::date($mail['date'])),
+                    esc_html(self::originWord($row['origin'])),
+                    '',
+                    esc_html(strtoupper($mail['carrier']) . ' ' . $mail['cart']),
+                    '',
+                    esc_html__('offen (aus Mail)', 'taxmod-shipping'),
+                    '',
+                    '<button type="button" class="button" data-taxship-mail-pdf="' . esc_url($pdf) . '" data-taxship-mail-cart="' . esc_attr($mail['cart']) . '" data-taxship-mail-carrier="' . esc_attr($mail['carrier']) . '" title="' . esc_attr__('Sendung anlegen und drucken', 'taxmod-shipping') . '">'
+                        . ListPage::icon('upload', __('Sendung anlegen und drucken', 'taxmod-shipping')) . '</button>',
+                ];
+            }
         }
 
+        $more = $limit !== null && count($all) > $limit
+            ? '<p><a class="button" href="' . esc_url(self::url(['view' => 'labels'])) . '">' . esc_html(sprintf(/* translators: %d: count */ __('Alle %d Etiketten', 'taxmod-shipping'), count($all))) . '</a></p>'
+            : '';
+
         return ListPage::grid(
-            [[__('Gekauft', 'taxmod-shipping')], [__('Empfänger', 'taxmod-shipping')], [__('Produkt', 'taxmod-shipping')], [__('Preis', 'taxmod-shipping'), \Taxmod\WordPress\Draw\GridMarkup::NUMBER], [__('Stand', 'taxmod-shipping')], [__('Sendungsnummer', 'taxmod-shipping')], ['']],
+            [[__('Gekauft', 'taxmod-shipping')], [__('Herkunft', 'taxmod-shipping')], [__('Empfänger', 'taxmod-shipping')], [__('Produkt', 'taxmod-shipping')], [__('Preis', 'taxmod-shipping'), \Taxmod\WordPress\Draw\GridMarkup::NUMBER], [__('Stand', 'taxmod-shipping')], [__('Sendungsnummer', 'taxmod-shipping')], ['']],
             $rows,
-            esc_html__('Noch nichts gekauft.', 'taxmod-shipping')
-        );
+            esc_html__('Noch keine Etiketten.', 'taxmod-shipping')
+        ) . $more;
+    }
+
+    private static function originWord(string $origin): string
+    {
+        return match ($origin) {
+            LabelOrigin::MAIL   => __('aus Mail', 'taxmod-shipping'),
+            LabelOrigin::UPLOAD => __('hochgeladen', 'taxmod-shipping'),
+            LabelOrigin::SHOP   => __('im Shop gekauft', 'taxmod-shipping'),
+            default             => __('beim Dienst gekauft', 'taxmod-shipping'),
+        };
     }
 
     private function purchaseButtons(Purchase $purchase): string
@@ -457,7 +528,7 @@ final class ShippingPage
 
         $number = (string) preg_replace('/\s+/', '', $text('number'));
         $rate = new Rate($carrier, 'stamp', $product, $cents, $number !== '', 0);
-        $reference = $cart === '' ? 'shop-' . current_time('YmdHis') : MailLabels::REFERENCE . $cart;
+        $reference = $cart === '' ? LabelOrigin::reference(LabelOrigin::UPLOAD, current_time('YmdHis')) : LabelOrigin::reference(LabelOrigin::MAIL, $cart);
         $purchase = Purchase::bought('', $rate, $name, ['carrier' => $carrier, 'reference' => $reference, 'state' => 'paid', 'numbers' => $number === '' ? [] : [$number]], current_time('mysql'));
         $id = (new ShipmentStore())->add($purchase, null, $contact, $settings->senderContact(), $firm);
         $kept = $this->keep($id, (string) wp_unslash((string) ($_POST['stamp_pdf'] ?? '')));
@@ -561,7 +632,7 @@ final class ShippingPage
         // D-1506: bought in the carrier's shop by the owner; this only records it, nothing is asked of a carrier module.
         $number = sanitize_text_field(wp_unslash((string) ($_POST['number'] ?? '')));
         $answer = $rate->shopUrl !== ''
-            ? ['carrier' => $rate->carrier, 'reference' => 'shop-' . current_time('YmdHis'), 'state' => 'paid', 'numbers' => $number === '' ? [] : [$number]]
+            ? ['carrier' => $rate->carrier, 'reference' => LabelOrigin::reference(LabelOrigin::SHOP, current_time('YmdHis')), 'state' => 'paid', 'numbers' => $number === '' ? [] : [$number]]
             : apply_filters(Plugin::BUY, null, $rate->toArray(), ['sender' => $sender->toArray(), 'receiver' => $receiver->toArray(), 'email' => $settings->email()]);
         $purchase = Purchase::bought('', $rate, $receiver->name, is_array($answer) ? $answer : null, current_time('mysql'));
         (new ShipmentStore())->add($purchase, $parcel, $contact > 0 ? $contact : $typed, $settings->senderContact(), $firm);

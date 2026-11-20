@@ -27,7 +27,7 @@ final class ShipmentChanges
      * @param int|Address $receiver a contact record, or an address typed in the dialog (becomes a contact)
      * @return list<array<string, mixed>>
      */
-    public function bought(Purchase $purchase, Parcel $parcel, int|Address $receiver, int $sender, int $carrierFirm, int $sale = 0): array
+    public function bought(Purchase $purchase, ?Parcel $parcel, int|Address $receiver, int $sender, int $carrierFirm, int $sale = 0): array
     {
         $r = $this->roles;
         $changes = [];
@@ -46,10 +46,11 @@ final class ShipmentChanges
             (string) $r->field('shipment_carrier')   => $carrierFirm > 0 ? (string) $carrierFirm : '',
             (string) $r->field('shipment_product')   => $purchase->rate->name,
             (string) $r->field('shipment_price')     => ['neu' => $this->amount(Money::decimal($purchase->rate->priceCents), 'currency_default')],
-            (string) $r->field('shipment_weight')    => ['neu' => $this->amount((string) $parcel->weightGrams, 'unit_gram')],
-            (string) $r->field('shipment_length')    => ['neu' => $this->amount((string) $parcel->lengthCm, 'unit_metre', 'prefix_centi')],
-            (string) $r->field('shipment_width')     => ['neu' => $this->amount((string) $parcel->widthCm, 'unit_metre', 'prefix_centi')],
-            (string) $r->field('shipment_height')    => ['neu' => $this->amount((string) $parcel->heightCm, 'unit_metre', 'prefix_centi')],
+            // A stamp bought in the Post shop comes without a measured parcel (D-1507): its sizes stay empty, never guessed.
+            (string) $r->field('shipment_weight')    => $parcel === null ? '' : ['neu' => $this->amount((string) $parcel->weightGrams, 'unit_gram')],
+            (string) $r->field('shipment_length')    => $parcel === null ? '' : ['neu' => $this->amount((string) $parcel->lengthCm, 'unit_metre', 'prefix_centi')],
+            (string) $r->field('shipment_width')     => $parcel === null ? '' : ['neu' => $this->amount((string) $parcel->widthCm, 'unit_metre', 'prefix_centi')],
+            (string) $r->field('shipment_height')    => $parcel === null ? '' : ['neu' => $this->amount((string) $parcel->heightCm, 'unit_metre', 'prefix_centi')],
             (string) $r->field('shipment_state')     => (string) $r->value($purchase->isPaid() ? 'shipment_paid' : 'shipment_awaiting_payment'),
             (string) $r->field('shipment_number')    => self::numbers($purchase),
             (string) $r->field('shipment_reference') => $purchase->reference,

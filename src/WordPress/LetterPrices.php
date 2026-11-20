@@ -35,17 +35,34 @@ final class LetterPrices
                 return $rates;
             }
 
-            $door = new ModelDoor();
-            $records = $door->records($node);
-            $parts = [];
-            foreach ($records as $values) {
-                foreach (['letter_price', 'letter_max_length', 'letter_max_width', 'letter_max_height', 'letter_max_weight'] as $role) {
-                    $parts[] = (int) (($values[$r->optional($role)] ?? [])[0] ?? 0);
-                }
-            }
-            $parts = array_values(array_unique(array_filter($parts)));
-
-            return [...$rates, ...LetterRates::of($r, $records, $parts === [] ? [] : $door->valuesOf($parts), $parcel)];
+            return [...$rates, ...self::offers($parcel)];
         }, 10, 2);
+    }
+
+    /**
+     * Every letter of the price list, for the stamp upload's product suggestion (D-1507): the smallest parcel fits them all.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function all(): array
+    {
+        return ShipmentStore::roles()->optional('letter_product') === 0 ? [] : self::offers(new Parcel(1, 1, 1, 1));
+    }
+
+    /** @return list<array<string, mixed>> the letters that take the parcel, read in two queries (CD-7) */
+    private static function offers(Parcel $parcel): array
+    {
+        $r = ShipmentStore::roles();
+        $door = new ModelDoor();
+        $records = $door->records($r->optional('letter_product'));
+        $parts = [];
+        foreach ($records as $values) {
+            foreach (['letter_price', 'letter_max_length', 'letter_max_width', 'letter_max_height', 'letter_max_weight'] as $role) {
+                $parts[] = (int) (($values[$r->optional($role)] ?? [])[0] ?? 0);
+            }
+        }
+        $parts = array_values(array_unique(array_filter($parts)));
+
+        return LetterRates::of($r, $records, $parts === [] ? [] : $door->valuesOf($parts), $parcel);
     }
 }

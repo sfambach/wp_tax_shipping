@@ -46,7 +46,7 @@ final class ShipmentStore
     }
 
     /** One act: a typed receiver becomes a contact, the purchase a record of «Sendungen». @return int the record id */
-    public function add(Purchase $purchase, Parcel $parcel, int|Address $receiver, int $sender, int $carrierFirm): int
+    public function add(Purchase $purchase, ?Parcel $parcel, int|Address $receiver, int $sender, int $carrierFirm): int
     {
         $answer = $this->door()->write((new ShipmentChanges(self::roles()))->bought($purchase, $parcel, $receiver, $sender, $carrierFirm));
 

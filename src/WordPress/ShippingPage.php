@@ -4,6 +4,7 @@ namespace TaxmodShipping\WordPress;
 
 use Taxmod\Core\Description\InputKind;
 use Taxmod\WordPress\Admin\ListPage;
+use Taxmod\WordPress\Admin\RecordPick;
 use Taxmod\WordPress\ModelDoor;
 use TaxmodShipping\Core\Address;
 use TaxmodShipping\Core\LetterRates;
@@ -27,9 +28,10 @@ final class ShippingPage
     public const PRINT    = 'taxship_print';
     public const DOWNLOAD = 'taxship_download';
     public const REMOVE   = 'taxship_remove';
+    public const STAMP    = 'taxship_stamp';
 
     /** admin-post action → method */
-    public const ACTS = [self::BUY => 'buy', self::STATUS => 'status', self::PRINT => 'printLabel', self::DOWNLOAD => 'download', self::REMOVE => 'remove'];
+    public const ACTS = [self::BUY => 'buy', self::STATUS => 'status', self::PRINT => 'printLabel', self::DOWNLOAD => 'download', self::REMOVE => 'remove', self::STAMP => 'stamp'];
 
     /** D-1507: the Etiketten module's 62 mm postage print, attached by its handle only. */
     public const LABEL62 = 'taxmod-label62';
@@ -59,10 +61,11 @@ final class ShippingPage
             $sections[] = ['html' => '<div class="notice notice-warning inline"><p>' . esc_html($parcel) . '</p></div>'];
         }
 
-        $sections[] = ['title' => __('Gekaufte Etiketten', 'taxmod-shipping'), 'html' => $this->purchases()];
+        $sections[] = ['title' => __('Gekaufte Etiketten', 'taxmod-shipping'), 'html' => (self::canPrintPostage() ? $this->stampDialog() : '') . $this->purchases()];
 
         if (self::canPrintPostage()) {
             wp_enqueue_script(self::LABEL62);
+            wp_enqueue_script('taxship-stamp', plugins_url('assets/stamp-upload.js', dirname(__DIR__, 2) . '/wp_tax_shipping.php'), [self::LABEL62], Plugin::VERSION, true);
         }
 
         return ListPage::page(__('Versand', 'taxmod-shipping'), [], $sections, Plugin::VERSION, 'Taxmod Versand');
@@ -289,6 +292,88 @@ final class ShippingPage
         }
 
         return $html . $post(self::REMOVE, ListPage::ICON_DELETE, __('Sendung löschen (rückgängig machbar)', 'taxmod-shipping'));
+    }
+
+    /**
+     * D-1507: «Gekaufte Marke hochladen». The stamp PDF from the Post shop is read in the browser only (assets/stamp-upload.js
+     * fills this dialog from its text); «Eintragen und drucken» prints it on 62 mm and then records the purchase.
+     */
+    private function stampDialog(): string
+    {
+        $formId = 'taxship-stamp-form';
+        $line = static fn (string $name, string $label, array $options = []): string => '<label style="display:block;margin:.3em 0"><span style="display:inline-block;width:9em">' . esc_html($label) . '</span>'
+            . ListPage::field(InputKind::Line, $name, '', $options + ['form' => $formId, 'size' => '24', 'id' => 'taxship-stamp-' . preg_replace('/\W+/', '-', $name)]) . '</label>';
+        $letters = '';
+        foreach (LetterPrices::all() as $letter) {
+            $letters .= '<option value="' . esc_attr((string) $letter['name']) . '" data-cents="' . esc_attr((string) $letter['price_cents']) . '"></option>';
+        }
+
+        $body = '<p>' . esc_html__('Wähle das PDF der Marke aus dem Shop der Post. Es wird nur hier im Browser gelesen, nicht hochgeladen. Was sich lesen lässt, steht danach in den Feldern; prüfe es.', 'taxmod-shipping') . '</p>'
+            . '<p><button type="button" class="button" data-taxship-stamp-pick>' . ListPage::icon('pdf', __('PDF wählen', 'taxmod-shipping')) . ' ' . esc_html__('PDF wählen', 'taxmod-shipping') . '</button> '
+            . '<span data-taxship-stamp-state data-none="' . esc_attr__('Noch kein PDF gewählt.', 'taxmod-shipping') . '" data-read="' . esc_attr__('Gelesen:', 'taxmod-shipping') . '">' . esc_html__('Noch kein PDF gewählt.', 'taxmod-shipping') . '</span></p>'
+            . '<datalist id="taxship-stamp-letters">' . $letters . '</datalist>'
+            . $line('product', __('Produkt', 'taxmod-shipping'), ['list' => 'taxship-stamp-letters'])
+            . $line('price', __('Preis (€)', 'taxmod-shipping'), ['size' => '8'])
+            . $line('number', __('Sendungsnummer', 'taxmod-shipping'))
+            . '<div style="margin:.3em 0"><span style="display:inline-block;width:9em">' . esc_html__('Empfänger', 'taxmod-shipping') . '</span>'
+            . RecordPick::field('receiver_contact', (new Contacts())->pickTree(), null, $formId) . '</div>'
+            . '<p class="description">' . esc_html__('Oder neu, aus dem PDF gelesen:', 'taxmod-shipping') . '</p>'
+            . $line('receiver[name]', __('Name', 'taxmod-shipping')) . $line('receiver[addition]', __('Zusatz', 'taxmod-shipping'))
+            . $line('receiver[street]', __('Straße', 'taxmod-shipping')) . $line('receiver[number]', __('Hausnummer', 'taxmod-shipping'))
+            . $line('receiver[postal_code]', __('PLZ', 'taxmod-shipping')) . $line('receiver[city]', __('Ort', 'taxmod-shipping'));
+
+        return '<form id="' . esc_attr($formId) . '" method="post" action="' . esc_url(admin_url('admin-post.php')) . '" data-taxship-stamp-form>'
+            . wp_nonce_field(self::STAMP, '_wpnonce', true, false)
+            . '<input type="hidden" name="action" value="' . esc_attr(self::STAMP) . '"><input type="hidden" name="receiver[country]" value="DE"></form>'
+            . '<div style="display:flex;gap:.5em;align-items:center;margin:.5em 0">' . ListPage::dialogAction('taxship-stamp', __('Gekaufte Marke hochladen', 'taxmod-shipping'), __('Gekaufte Marke hochladen', 'taxmod-shipping'), $body, 'action', self::STAMP, __('Eintragen und drucken', 'taxmod-shipping'), $formId, 'upload')
+            . '<span class="description">' . esc_html__('Marke im Shop der Post gekauft? Hier hochladen, eintragen und auf 62 mm drucken.', 'taxmod-shipping') . '</span></div>';
+    }
+
+    /** admin-post «Eintragen und drucken» (D-1507): capability → nonce → validate → record. The print happened in the browser. */
+    public function stamp(): string
+    {
+        self::allowed();
+        ListPage::nonce(self::STAMP);
+        $text = static fn (string $name): string => sanitize_text_field(wp_unslash((string) ($_POST[$name] ?? '')));
+        $product = $text('product');
+
+        try {
+            $cents = Money::cents($text('price'));
+        } catch (ShippingError) {
+            $cents = 0;
+        }
+
+        if ($product === '' || $cents <= 0) {
+            throw new ShippingError(__('Produkt und Preis der Marke fehlen.', 'taxmod-shipping'));
+        }
+
+        $settings = new Settings();
+        $contact = absint($_POST['receiver_contact'] ?? 0);
+        $typed = Address::fromArray(array_map(static fn (mixed $v): string => is_scalar($v) ? sanitize_text_field(wp_unslash((string) $v)) : '', is_array($_POST['receiver'] ?? null) ? $_POST['receiver'] : []));
+        $receiver = $contact > 0 ? (new Contacts())->address($contact) : $typed;
+
+        if (! $receiver->isComplete()) {
+            throw new ShippingError(__('Empfänger unvollständig: Name, Straße, PLZ und Ort sind nötig.', 'taxmod-shipping'));
+        }
+
+        $firm = $settings->carrierFirms()[LetterRates::CARRIER] ?? 0;
+
+        if ($firm === 0) {
+            throw new ShippingError(__('Unter Einstellungen › Versand fehlt die Firma für Deutsche Post.', 'taxmod-shipping'));
+        }
+
+        $missing = ShipmentStore::roles()->missing();
+
+        if ($missing !== []) {
+            throw new ShippingError(__('Das Modell kennt «Sendungen» noch nicht (fehlende Rollen):', 'taxmod-shipping') . ' ' . implode(', ', $missing));
+        }
+
+        $number = (string) preg_replace('/\s+/', '', $text('number'));
+        $rate = new Rate(LetterRates::CARRIER, 'stamp', $product, $cents, $number !== '', 0);
+        $purchase = Purchase::bought('', $rate, $receiver->name, ['carrier' => LetterRates::CARRIER, 'reference' => 'shop-' . current_time('YmdHis'), 'state' => 'paid', 'numbers' => $number === '' ? [] : [$number]], current_time('mysql'));
+        (new ShipmentStore())->add($purchase, null, $contact > 0 ? $contact : $typed, $settings->senderContact(), $firm);
+
+        return self::url();
     }
 
     /** admin-post «Kaufen»: capability → nonce → validate (the price shown is still the price) → act. */

@@ -47,6 +47,17 @@ final class ShipmentsTest extends TestCase
         self::assertSame('55', $changes[1]['values'][(string) self::id('fields', 'shipment_receiver')]);
     }
 
+    public function testWithoutParcelTheSizesStayEmpty(): void
+    {
+        $values = (new ShipmentChanges(self::roles()))->bought(self::purchase(), null, 55, 77, 0)[1]['values'];
+
+        foreach (['shipment_weight', 'shipment_length', 'shipment_width', 'shipment_height'] as $role) {
+            self::assertArrayNotHasKey((string) self::id('fields', $role), $values);
+        }
+
+        self::assertArrayHasKey((string) self::id('fields', 'shipment_price'), $values);
+    }
+
     public function testStatusSetsStateAndNumbers(): void
     {
         $paid = self::purchase()->withStatus(['state' => 'paid', 'numbers' => ['0034']]);

@@ -77,3 +77,17 @@ flowchart LR
 ```
 
 INFERRED: Die Marke trägt keinen Zusatztext (eBay setzt dort Bestellnummer und Verkäufer). Gemessen mit der Marke vom 20.11.2026: 54 × 97 mm.
+
+## Gekaufte Marke hochladen (0.0.6, D-1507)
+
+Stefan (20.11. 15:06): «kannst du nicht einfach gekaufte marke hochladen machen bei versand». Über «Gekaufte Etiketten» öffnet der Knopf «Gekaufte Marke hochladen» einen Dialog. «PDF wählen» liest die Internetmarke im Browser (pdf.js aus `taxmod-label62`) und füllt Produkt, Preis, Sendungsnummer und Empfänger. «Eintragen und drucken» öffnet erst den 62-mm-Druckdialog, danach legt der Server den Satz in «Sendungen» an: Firma Post, bezahlt, ohne Gewicht und Maße.
+
+```mermaid
+flowchart LR
+  P["PDF wählen"] --> L["Text lesen im Browser"]
+  L --> F["Dialog: Produkt · Preis · Nummer · Empfänger"]
+  F -- "Eintragen und drucken" --> D["Druckdialog 62 mm"]
+  D --> S["taxship_stamp: Satz in «Sendungen»"]
+```
+
+INFERRED: Der Leser kennt das Layout der Internetmarke vom 20.11.2026 (Datum und Preis in einer Zeile, Nummer «A0 …», Empfängerblock darunter, letzte Zeile PLZ und Ort). Was er nicht findet, bleibt leer. Das Produkt ist das Briefprodukt mit gleichem Preis, sonst «Einschreiben», wenn die Marke es sagt; sonst leer.

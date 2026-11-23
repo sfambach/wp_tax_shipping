@@ -81,7 +81,7 @@ final class ShippingPage
 
     public function render(): string
     {
-        if (! current_user_can(\Taxmod\WordPress\Plugin::CAPABILITY)) {
+        if (! current_user_can(\Taxmod\WordPress\Rights::SHIP)) {
             return '';
         }
 
@@ -856,7 +856,7 @@ final class ShippingPage
 
     private static function allowed(): void
     {
-        if (! current_user_can(\Taxmod\WordPress\Plugin::CAPABILITY)) {
+        if (! current_user_can(\Taxmod\WordPress\Rights::SHIP)) {
             ListPage::fail(__('Keine Berechtigung.', 'taxmod-shipping'), self::url());
         }
     }

@@ -24,7 +24,7 @@ final class SettingsPage
 
     public function render(): string
     {
-        if (! current_user_can(\Taxmod\WordPress\Plugin::CAPABILITY)) {
+        if (! current_user_can(\Taxmod\WordPress\Rights::CONFIGURE)) {
             return '';
         }
 
@@ -66,7 +66,7 @@ final class SettingsPage
     /** admin-post: capability → nonce → sanitize → save. */
     public function save(): string
     {
-        if (! current_user_can(\Taxmod\WordPress\Plugin::CAPABILITY)) {
+        if (! current_user_can(\Taxmod\WordPress\Rights::CONFIGURE)) {
             ListPage::fail(__('Keine Berechtigung.', 'taxmod-shipping'), self::url());
         }
 

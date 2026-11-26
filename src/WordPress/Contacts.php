@@ -49,7 +49,7 @@ final class Contacts
             return $roles;
         });
         add_action('admin_init', static function (): void {
-            if (! current_user_can(\Taxmod\WordPress\Plugin::CAPABILITY)) {
+            if (! current_user_can(\Taxmod\WordPress\Rights::CONFIGURE)) {
                 return;
             }
 

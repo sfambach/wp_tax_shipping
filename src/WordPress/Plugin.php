@@ -21,8 +21,8 @@ use Taxmod\WordPress\Admin\ListPage;
  */
 final class Plugin
 {
-    public const VERSION      = '0.0.17';
-    public const MIN_MODELLER = '0.2.191';
+    public const VERSION      = '0.0.18';
+    public const MIN_MODELLER = '0.2.237';
     public const SLUG         = 'taxmod-versand';
     public const SETTINGS     = 'taxmod-versand-einstellungen';
 
@@ -72,9 +72,9 @@ final class Plugin
      */
     public static function pages(array $pages): array
     {
-        $pages[] = ['slug' => self::SLUG, 'label' => __('Versand', 'taxmod-shipping'), 'area' => 'outbound', 'capability' => \Taxmod\WordPress\Plugin::CAPABILITY,
+        $pages[] = ['slug' => self::SLUG, 'label' => __('Versand', 'taxmod-shipping'), 'area' => 'outbound', 'capability' => \Taxmod\WordPress\Rights::SHIP,
             'render' => static fn (): string => (new ShippingPage())->render()];
-        $pages[] = ['slug' => self::SETTINGS, 'label' => __('Versand', 'taxmod-shipping'), 'area' => 'settings', 'capability' => \Taxmod\WordPress\Plugin::CAPABILITY,
+        $pages[] = ['slug' => self::SETTINGS, 'label' => __('Versand', 'taxmod-shipping'), 'area' => 'settings', 'capability' => \Taxmod\WordPress\Rights::CONFIGURE,
             'render' => static fn (): string => (new SettingsPage())->render()];
 
         return $pages;
